@@ -1,0 +1,1 @@
+UI file is in server/public/index.html (also copied to project root index.html).
