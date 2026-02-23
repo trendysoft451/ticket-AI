@@ -134,6 +134,28 @@ async function pdfFirstPageToPng(pdfPath) {
   return `${outBase}-1.png`;
 }
 
+/** Nettoyage robuste JSON OpenAI (retire fences + extrait {...}) */
+function parseOpenAIJson(raw) {
+  const cleaned = String(raw || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  const i = cleaned.indexOf("{");
+  const j = cleaned.lastIndexOf("}");
+  if (i === -1 || j === -1 || j <= i) {
+    throw new Error(`OpenAI: JSON introuvable: ${cleaned}`);
+  }
+  const jsonOnly = cleaned.slice(i, j + 1);
+
+  try {
+    return JSON.parse(jsonOnly);
+  } catch {
+    throw new Error(`OpenAI: JSON invalide: ${jsonOnly}`);
+  }
+}
+
 async function openaiExtractFromImage(dataUrl) {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY manquante (env)");
 
@@ -186,11 +208,8 @@ Règles:
     null;
 
   if (!raw) throw new Error("OpenAI: pas de texte exploitable");
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error(`OpenAI: JSON invalide: ${raw}`);
-  }
+
+  return parseOpenAIJson(raw);
 }
 
 /** ===== CNX API calls (auth + upload GED) ===== */
@@ -243,7 +262,6 @@ async function cnxAuthenticate() {
 async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const { baseUrl } = getConfig();
   const uuid = await cnxAuthenticate();
-
   const url = `${baseUrl.replace(/\/$/, "")}/v1/ged/documents`;
 
   const boundary = "----WebKitFormBoundary" + crypto.randomUUID().replace(/-/g, "");
@@ -251,7 +269,6 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
 
   const parts = [];
 
-  // ✅ Champ exact attendu
   parts.push(
     Buffer.from(
       `--${boundary}\r\n` +
@@ -379,7 +396,7 @@ app.post("/api/admin/config", (req, res) => {
   }
 });
 
-/** Upload PDF -> GED + OCR */
+/** Upload PDF -> GED + OCR (returns gedId + prefill + suggestion) */
 app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
   let pdfPath = null;
   let pngPath = null;
@@ -435,7 +452,7 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
   }
 });
 
-/** Build Écritures JSON */
+/** Build Écritures JSON, using ReferenceGed from GED upload. */
 app.post("/api/receipts/process", upload.none(), async (req, res) => {
   try {
     const meta = JSON.parse(req.body.meta || "{}");
