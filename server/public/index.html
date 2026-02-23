@@ -2,253 +2,246 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Frais — GED + OCR + Écritures</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Frais — GED + OCR</title>
+
   <style>
-    :root{--bg:#f2f2f7;--card:#fff;--border:rgba(60,60,67,.15);--text:#111;--sub:rgba(60,60,67,.65);--accent:#007aff;--danger:#b00020;}
-    html,body{height:100%} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial}
-    .container{max-width:760px;margin:0 auto;padding:16px 16px 28px}
-    .h1{font-size:20px;font-weight:800;margin:10px 0 2px}
-    .sub{font-size:13px;color:var(--sub);margin:0 0 14px;line-height:1.35}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:14px;box-shadow:0 1px 0 rgba(0,0,0,.04)}
-    .grid{display:grid;gap:12px}
-    label{display:grid;gap:6px;font-size:13px;color:var(--sub)}
-    input,select,textarea{padding:12px;border-radius:14px;border:1px solid var(--border);font-size:16px;outline:none;background:#fff;color:var(--text)}
-    textarea{min-height:220px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:12px;white-space:pre}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .btn{background:var(--accent);color:#fff;border:none;border-radius:14px;padding:12px 14px;font-weight:800;font-size:16px}
-    .btn:active{transform:scale(.99)}
-    .pill{display:inline-block;padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;font-size:12px;color:var(--sub);}
-    .err{font-size:12px;color:var(--danger);white-space:pre-wrap}
-    .ok{font-size:12px;color:#0a7a2f;white-space:pre-wrap}
-    .hidden{display:none!important}
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f6f8;
+      color: #222;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 200px;
+      font-family: monospace;
+    }
+
+    .row {
+      display: flex;
+      gap: 20px;
+    }
+
+    .row > div {
+      flex: 1;
+    }
+
+    button {
+      padding: 10px 16px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    .error {
+      color: red;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .success {
+      color: green;
+      margin-top: 10px;
+      font-size: 13px;
+    }
   </style>
 </head>
+
 <body>
 <div class="container">
-  <div id="title" class="h1"></div>
-  <p id="subtitle" class="sub"></p>
 
-  <div id="admin" class="grid hidden">
-    <div class="card grid">
-      <div class="sub">Connexion API CNX (stockée en mémoire serveur). En prod, configure via variables Render.</div>
-      <label>URL API (base) — ex: https://isuiteacd.suiteexpert.fr/cnx/api
-        <input id="baseUrl" placeholder="https://isuiteacd.suiteexpert.fr/cnx/api">
-      </label>
-      <div class="row">
-        <label>Identifiant<input id="identifiant" placeholder="..."></label>
-        <label>Mot de passe<input id="motdepasse" type="password" placeholder="..."></label>
-      </div>
-      <button class="btn" id="saveAdmin">Enregistrer</button>
-      <div class="err" id="adminErr"></div>
-      <div class="ok" id="adminOk"></div>
-    </div>
+  <h1>Gestion des frais</h1>
+  <p>1) Upload PDF en GED + OCR → 2) Génération des écritures</p>
+
+  <div class="card">
+    <h3>1️⃣ Upload PDF en GED + OCR</h3>
+
+    <label>
+      PDF à envoyer
+      <input type="file" id="pdfGed" accept="application/pdf">
+    </label>
+
+    <button id="uploadGed">Envoyer + OCR</button>
+
+    <div id="gedMessage"></div>
+
+    <label>
+      ID GED
+      <input id="referenceGedId" readonly>
+    </label>
   </div>
 
-  <div id="user" class="grid hidden">
-    <div class="card grid">
-      <div class="sub"><span class="pill">1</span> Upload PDF en GED + OCR → pré-remplissage automatique.</div>
-      <label>PDF à envoyer en GED (et OCR)
-        <input id="pdfGed" type="file" accept="application/pdf">
-      </label>
-      <button class="btn" id="uploadGed">Envoyer + OCR</button>
-      <div class="err" id="gedErr"></div>
-      <div class="ok" id="gedOk"></div>
-      <label>Id GED (référence)
-        <input id="referenceGedId" placeholder="(rempli automatiquement)" readonly>
-      </label>
+  <div class="card">
+    <h3>2️⃣ Génération des écritures</h3>
+
+    <div class="row">
+      <div>
+        <label>
+          Journal
+          <input id="journal" value="AC">
+        </label>
+      </div>
+
+      <div>
+        <label>
+          Compte fournisseur
+          <input id="compteFournisseur">
+        </label>
+      </div>
     </div>
 
-    <div class="card grid">
-      <div class="sub"><span class="pill">2</span> Vérifie/ajuste puis génère le JSON Écritures.</div>
-      <div class="row">
-        <label>Journal<input id="journal" value="AC"></label>
-        <label>Compte fournisseur (F...)<input id="compteFournisseur" placeholder="ex: FREPAS01"></label>
+    <div class="row">
+      <div>
+        <label>
+          Date ticket
+          <input id="dateTicket">
+        </label>
       </div>
 
-      <div class="row">
-        <label>Catégorie<select id="categorie"></select></label>
-        <label>TVA (taux)<select id="tvaRate"></select></label>
+      <div>
+        <label>
+          Numéro ticket
+          <input id="numeroTicket">
+        </label>
       </div>
-
-      <div class="row">
-        <label>Date ticket (YYYY-MM-DD)<input id="dateTicket" placeholder="2026-02-20"></label>
-        <label>Numéro ticket<input id="numeroTicket" placeholder="ex: 000123"></label>
-      </div>
-
-      <label>Raison sociale (libellé)<input id="raisonSociale" placeholder="ex: UBER BV"></label>
-
-      <div class="row">
-        <label>Montant TTC<input id="ttc" inputmode="decimal" placeholder="ex: 12,34"></label>
-        <label>Montant HT<input id="ht" inputmode="decimal" placeholder="ex: 11,22"></label>
-      </div>
-
-      <label>Montant TVA<input id="tvaMontant" inputmode="decimal" placeholder="ex: 1,12"></label>
-
-      <button class="btn" id="submit">Générer Écritures</button>
-      <div class="err" id="err"></div>
     </div>
 
-    <div class="card grid">
-      <div class="sub">Résultat (JSON)</div>
-      <textarea id="result" readonly></textarea>
+    <label>
+      Raison sociale
+      <input id="raisonSociale">
+    </label>
+
+    <div class="row">
+      <div>
+        <label>
+          Montant TTC
+          <input id="ttc">
+        </label>
+      </div>
+
+      <div>
+        <label>
+          Montant HT
+          <input id="ht">
+        </label>
+      </div>
     </div>
+
+    <label>
+      TVA
+      <input id="tvaMontant">
+    </label>
+
+    <button id="submit">Générer JSON</button>
+
+    <div class="error" id="error"></div>
   </div>
+
+  <div class="card">
+    <h3>Résultat JSON</h3>
+    <textarea id="result" readonly></textarea>
+  </div>
+
 </div>
 
 <script>
-  const qs = new URLSearchParams(location.search);
-  const isAdmin = qs.get("admin") === "1";
-  const el = (id)=>document.getElementById(id);
+const el = id => document.getElementById(id);
 
-  const CATEGORIES = [
+el("uploadGed").addEventListener("click", async () => {
+  const file = el("pdfGed").files[0];
+  if (!file) return alert("Choisis un PDF");
 
-  function compteFromCategory(catKey){
-    switch(catKey){
-      case "repas_pro":
-      case "repas": return "FREPAS";
-      case "carburant": return "FCARBU";
-      case "parking": return "FPARKING";
-      case "peages": return "FPEAGE";
-      case "petites_fournitures":
-      case "papeterie":
-      default: return "FDIVERS";
-    }
+  const form = new FormData();
+  form.append("pdf", file);
+
+  const resp = await fetch("/api/ged/upload", { method: "POST", body: form });
+  const json = await resp.json();
+
+  if (!resp.ok) {
+    el("gedMessage").innerHTML = '<div class="error">' + json.error + '</div>';
+    return;
   }
 
-    { key: "petites_fournitures", label: "Petites fournitures et entretien", allowedVat: ["20","10"] },
-    { key: "papeterie", label: "Papeterie", allowedVat: ["20"] },
-    { key: "carburant", label: "Carburant", allowedVat: ["20"] },
-    { key: "repas_pro", label: "Repas pro", allowedVat: ["10"] },
-    { key: "repas", label: "Repas", allowedVat: ["0"] },
-    { key: "peages", label: "Péages", allowedVat: ["20"] },
-    { key: "parking", label: "Parking", allowedVat: ["20"] }
-  ];
+  el("referenceGedId").value = json.gedId;
+  el("gedMessage").innerHTML = '<div class="success">Upload OK - ID GED: ' + json.gedId + '</div>';
 
-  function fillCategories(){
-    el("categorie").innerHTML = CATEGORIES.map(c=>`<option value="${c.key}">${c.label}</option>`).join("");
+  const ex = json.extraction || {};
+  if (ex.date_document) el("dateTicket").value = ex.date_document;
+  if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
+  if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
+  if (ex.montant_ttc) el("ttc").value = ex.montant_ttc;
+  if (ex.montant_ht) el("ht").value = ex.montant_ht;
+  if (ex.montant_tva) el("tvaMontant").value = ex.montant_tva;
+});
+
+el("submit").addEventListener("click", async () => {
+  const meta = {
+    journal: el("journal").value,
+    compteFournisseur: el("compteFournisseur").value,
+    referenceGedId: el("referenceGedId").value,
+    date_ticket: el("dateTicket").value,
+    numero_ticket: el("numeroTicket").value,
+    raison_sociale: el("raisonSociale").value,
+    montant_ttc: Number(el("ttc").value),
+    ht: Number(el("ht").value),
+    tva_montant: Number(el("tvaMontant").value)
+  };
+
+  const form = new FormData();
+  form.append("meta", JSON.stringify(meta));
+
+  const resp = await fetch("/api/receipts/process", { method: "POST", body: form });
+  const json = await resp.json();
+
+  if (!resp.ok) {
+    el("error").textContent = json.error;
+    return;
   }
-  function fillVatOptions(){
-    const cat = CATEGORIES.find(c=>c.key===el("categorie").value);
-    const allowed = (cat && cat.allowedVat) ? cat.allowedVat : ["20","10","0"];
-    el("tvaRate").innerHTML = allowed.map(r=>`<option value="${r}">${r}%</option>`).join("");
-  }
-  function setSelectValue(selectEl, value){
-    const opt = [...selectEl.options].find(o => o.value === value);
-    if (opt) selectEl.value = value;
-  }
-  function toNumOrNull(v){
-    const s = String(v||"").replace(",", ".").trim();
-    if (!s) return null;
-    const x = Number(s);
-    return Number.isFinite(x) ? x : null;
-  }
 
-  if (isAdmin) {
-    el("title").textContent = "Admin — Connexion API";
-    el("subtitle").textContent = "Configure l'URL, l'identifiant et le mot de passe CNX.";
-    el("admin").classList.remove("hidden");
-
-    el("saveAdmin").addEventListener("click", async ()=>{
-      el("adminErr").textContent=""; el("adminOk").textContent="";
-      const payload = {
-        baseUrl: el("baseUrl").value.trim(),
-        identifiant: el("identifiant").value.trim(),
-        motdepasse: el("motdepasse").value
-      };
-      try{
-        const resp = await fetch("/api/admin/config", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
-        const out = await resp.json();
-        if (!resp.ok) throw new Error(out.error || "Erreur");
-        el("adminOk").textContent = "OK enregistré.";
-      }catch(e){
-        el("adminErr").textContent = String(e.message || e);
-      }
-    });
-
-  } else {
-    el("title").textContent = "Frais — GED + OCR + Écritures";
-    el("subtitle").textContent = "1) Upload PDF en GED + OCR (pré-remplissage)  2) Génère le JSON d'écritures.";
-    el("user").classList.remove("hidden");
-
-    fillCategories();
-    fillVatOptions();
-    el("compteFournisseur").value = compteFromCategory(el("categorie").value);
-    el("categorie").addEventListener("change", ()=>{ fillVatOptions(); el("compteFournisseur").value = compteFromCategory(el("categorie").value); });
-
-    el("uploadGed").addEventListener("click", async ()=>{
-      el("gedErr").textContent=""; el("gedOk").textContent="";
-      const f = el("pdfGed").files && el("pdfGed").files[0];
-      if (!f) return el("gedErr").textContent = "Choisis un PDF d'abord.";
-      const form = new FormData();
-      form.append("pdf", f, f.name || "ticket.pdf");
-      try{
-        const resp = await fetch("/api/ged/upload", { method:"POST", body: form });
-        const out = await resp.json();
-        if (!resp.ok) throw new Error(out.error || "Erreur upload GED");
-
-        el("referenceGedId").value = out.gedId;
-        el("gedOk").textContent = "PDF envoyé. Id GED = " + out.gedId;
-
-        const ex = out.extraction || {};
-        if (ex.date_document) el("dateTicket").value = ex.date_document;
-        if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
-        if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
-        if (typeof ex.montant_ttc === "number") el("ttc").value = String(ex.montant_ttc).replace(".", ",");
-        if (typeof ex.montant_ht === "number") el("ht").value = String(ex.montant_ht).replace(".", ",");
-        if (typeof ex.montant_tva === "number") el("tvaMontant").value = String(ex.montant_tva).replace(".", ",");
-
-        const sug = out.suggestion || {};
-        if (sug.journal_ttc) { el("compteFournisseur").value = sug.journal_ttc; }
-        else { el("compteFournisseur").value = compteFromCategory(el("categorie").value); }
-        // si pas de match, on laisse le choix utilisateur (pas de setSelectValue)
-        if (sug.categorie_ui) {
-          setSelectValue(el("categorie"), sug.categorie_ui);
-          fillVatOptions();
-        }
-        if (sug.tva_rate) {
-          setSelectValue(el("tvaRate"), sug.tva_rate);
-        }
-      }catch(e){
-        el("gedErr").textContent = String(e.message || e);
-      }
-    });
-
-    el("submit").addEventListener("click", async ()=>{
-      el("err").textContent=""; el("result").value="";
-      const referenceGedId = el("referenceGedId").value.trim();
-      if (!referenceGedId) return el("err").textContent = "Uploade d'abord le PDF en GED.";
-
-      const meta = {
-        journal: el("journal").value.trim(),
-        compteFournisseur: el("compteFournisseur").value.trim(),
-        referenceGedId,
-        categorie_ui: el("categorie").value,
-        tva_rate: el("tvaRate").value,
-        date_ticket: el("dateTicket").value.trim() || null,
-        numero_ticket: el("numeroTicket").value.trim() || null,
-        raison_sociale: el("raisonSociale").value.trim() || null,
-        montant_ttc: toNumOrNull(el("ttc").value),
-        ht: toNumOrNull(el("ht").value),
-        tva_montant: toNumOrNull(el("tvaMontant").value)
-      };
-
-      if (!meta.journal) return el("err").textContent = "Journal obligatoire";
-      if (!meta.compteFournisseur) return el("err").textContent = "Compte fournisseur (F...) obligatoire";
-
-      const form = new FormData();
-      form.append("meta", JSON.stringify(meta));
-
-      try{
-        const resp = await fetch("/api/receipts/process", { method:"POST", body: form });
-        const out = await resp.json();
-        if (!resp.ok) throw new Error(out.error || "Erreur");
-        el("result").value = JSON.stringify(out, null, 2);
-      }catch(e){
-        el("err").textContent = String(e.message || e);
-      }
-    });
-  }
+  el("result").value = JSON.stringify(json, null, 2);
+});
 </script>
+
 </body>
 </html>
