@@ -13,15 +13,12 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-/**
- * ✅ FIX Render/ESM : servir correctement /server/public
- */
+/** ✅ FIX Render/ESM static */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "public");
-
 app.use(express.static(publicDir));
-app.get("/", (req, res) => res.sendFile(path.join(publicDir, "index.html")));
+app.get("/", (request, response) => response.sendFile(path.join(publicDir, "index.html")));
 
 const upload = multer({ dest: "uploads/" });
 const execFileAsync = promisify(execFile);
@@ -34,10 +31,11 @@ const OPENAI_MODEL = "gpt-4.1-mini";
 let runtimeConfig = {
   baseUrl: process.env.CNX_BASE_URL || "",
   identifiant: process.env.CNX_IDENTIFIANT || "",
-  motdepasse: process.env.CNX_MOTDEPASSE || ""
+  motdepasse: process.env.CNX_MOTDEPASSE || "",
+  codeDossier: process.env.CNX_CODE_DOSSIER || "" // requis
 };
 
-function req(v, label) {
+function required(v, label) {
   if (v === null || v === undefined || String(v).trim() === "") {
     throw new Error(`Champ obligatoire manquant : ${label}`);
   }
@@ -67,7 +65,7 @@ function isoDateOnly(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/** ===== Mapping TVA / comptes ===== */
+/** ===== TVA / comptes ===== */
 const VAT = {
   "20": { code_tva: "TN", compte_tva_44566: "44566200" },
   "10": { code_tva: "TI", compte_tva_44566: "44566100" },
@@ -97,24 +95,24 @@ function chargesAccount(categoryKey, vatRate) {
   }
 }
 
-/** ===== Catégorie suggérée depuis keywords OCR ===== */
-function suggestCategoryFromText(text) {
+/** ===== Mapping auto catégorie + compte fournisseur (F...) ===== */
+function suggestFromText(text) {
   const t = (text || "").toLowerCase();
   const hasAny = (arr) => arr.some((k) => t.includes(k));
 
   if (hasAny(["repas", "restaurant", "café", "cafe", "brasserie", "bistrot", "menu"])) {
-    return { categorie_ui: "repas_pro", journal_ttc: "FREPAS", tva_rate: "10" };
+    return { categorie_ui: "repas_pro", compteF: "FREPAS", tva_rate: "10" };
   }
   if (hasAny(["carburant", "gasoil", "gazole", "go", "super", "sp", "essence", "station-service"])) {
-    return { categorie_ui: "carburant", journal_ttc: "FCARBU", tva_rate: "20" };
+    return { categorie_ui: "carburant", compteF: "FCARBU", tva_rate: "20" };
   }
   if (hasAny(["parking", "stationnement", "park"])) {
-    return { categorie_ui: "parking", journal_ttc: "FPARKING", tva_rate: "20" };
+    return { categorie_ui: "parking", compteF: "FPARKING", tva_rate: "20" };
   }
   if (hasAny(["peage", "péage", "asf", "escota", "aprr", "sanef"])) {
-    return { categorie_ui: "peages", journal_ttc: "FPEAGE", tva_rate: "20" };
+    return { categorie_ui: "peages", compteF: "FPEAGE", tva_rate: "20" };
   }
-  return { categorie_ui: null, journal_ttc: "FDIVERS", tva_rate: null };
+  return { categorie_ui: null, compteF: "FDIVERS", tva_rate: null };
 }
 
 function guessVatRateFromAmounts(ht, tva) {
@@ -127,14 +125,14 @@ function guessVatRateFromAmounts(ht, tva) {
   return null;
 }
 
-/** Convert PDF first page to PNG using pdftoppm (poppler-utils) */
+/** PDF -> PNG */
 async function pdfFirstPageToPng(pdfPath) {
   const outBase = path.join("uploads", crypto.randomUUID());
   await execFileAsync("pdftoppm", ["-f", "1", "-l", "1", "-png", pdfPath, outBase]);
   return `${outBase}-1.png`;
 }
 
-/** Nettoyage robuste JSON OpenAI (retire fences + extrait {...}) */
+/** OpenAI JSON parsing robuste */
 function parseOpenAIJson(raw) {
   const cleaned = String(raw || "")
     .trim()
@@ -144,11 +142,9 @@ function parseOpenAIJson(raw) {
 
   const i = cleaned.indexOf("{");
   const j = cleaned.lastIndexOf("}");
-  if (i === -1 || j === -1 || j <= i) {
-    throw new Error(`OpenAI: JSON introuvable: ${cleaned}`);
-  }
-  const jsonOnly = cleaned.slice(i, j + 1);
+  if (i === -1 || j === -1 || j <= i) throw new Error(`OpenAI: JSON introuvable: ${cleaned}`);
 
+  const jsonOnly = cleaned.slice(i, j + 1);
   try {
     return JSON.parse(jsonOnly);
   } catch {
@@ -161,7 +157,7 @@ async function openaiExtractFromImage(dataUrl) {
 
   const prompt = `
 Tu extrais les infos d'un ticket/facture.
-Renvoie STRICTEMENT un JSON valide (pas de texte autour) :
+Renvoie STRICTEMENT un JSON valide :
 {
   "date_document": "AAAA-MM-JJ",
   "numero_ticket": "string",
@@ -170,11 +166,7 @@ Renvoie STRICTEMENT un JSON valide (pas de texte autour) :
   "montant_tva": 23.45,
   "raison_sociale": "Nom visible sur le ticket",
   "mots_cles": ["repas","restaurant","parking","peage","gasoil","super","sp","stationnement"]
-}
-Règles:
-- nombres en décimal (point).
-- si absent -> null.
-- "mots_cles" : 0 à 10 mots courts réellement présents sur le ticket.`.trim();
+}`.trim();
 
   const body = {
     model: OPENAI_MODEL,
@@ -208,26 +200,26 @@ Règles:
     null;
 
   if (!raw) throw new Error("OpenAI: pas de texte exploitable");
-
   return parseOpenAIJson(raw);
 }
 
-/** ===== CNX API calls (auth + upload GED) ===== */
+/** ===== CNX auth + session dossier + GED upload ===== */
 let cachedUuid = { value: "", at: 0 };
 
 function getConfig() {
   return {
     baseUrl: runtimeConfig.baseUrl || process.env.CNX_BASE_URL || "",
     identifiant: runtimeConfig.identifiant || process.env.CNX_IDENTIFIANT || "",
-    motdepasse: runtimeConfig.motdepasse || process.env.CNX_MOTDEPASSE || ""
+    motdepasse: runtimeConfig.motdepasse || process.env.CNX_MOTDEPASSE || "",
+    codeDossier: runtimeConfig.codeDossier || process.env.CNX_CODE_DOSSIER || ""
   };
 }
 
 async function cnxAuthenticate() {
   const { baseUrl, identifiant, motdepasse } = getConfig();
-  req(baseUrl, "CNX_BASE_URL");
-  req(identifiant, "CNX_IDENTIFIANT");
-  req(motdepasse, "CNX_MOTDEPASSE");
+  required(baseUrl, "CNX_BASE_URL");
+  required(identifiant, "CNX_IDENTIFIANT");
+  required(motdepasse, "CNX_MOTDEPASSE");
 
   if (cachedUuid.value && Date.now() - cachedUuid.at < 10 * 60 * 1000) return cachedUuid.value;
 
@@ -242,12 +234,9 @@ async function cnxAuthenticate() {
   const text = await resp.text();
   if (!resp.ok) throw new Error(`Authentification CNX (${resp.status}): ${text}`);
 
-  let out;
-  try {
-    out = JSON.parse(text);
-  } catch {
-    out = { raw: text };
-  }
+  const out = (() => {
+    try { return JSON.parse(text); } catch { return { raw: text }; }
+  })();
 
   const uuid = out?.UUID || out?.uuid || out?.data?.UUID || out?.data?.uuid || "";
   if (!uuid) throw new Error(`UUID introuvable dans la réponse auth: ${text}`);
@@ -257,8 +246,36 @@ async function cnxAuthenticate() {
 }
 
 /**
- * ✅ IMPORTANT : champ plan GED = idArboGed
+ * ✅ EXACTEMENT comme ton curl :
+ * - accept: text/plain
+ * - Content-Type: application/json-patch+json
+ * - body: "\"DA_CONSEIL\"" (JSON string)
  */
+async function cnxOpenDossierSession(codeDossier) {
+  const { baseUrl } = getConfig();
+  const uuid = await cnxAuthenticate();
+
+  const cd = required(codeDossier, "codeDossier");
+  const url = `${baseUrl.replace(/\/$/, "")}/v2/sessions/dossier`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      accept: "text/plain",
+      UUID: uuid,
+      "Content-Type": "application/json-patch+json"
+    },
+    body: JSON.stringify(String(cd)) // => "DA_CONSEIL"
+  });
+
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`Session dossier CNX (${resp.status}): ${text}`);
+
+  // souvent text/plain => on renvoie le texte
+  return { raw: text };
+}
+
+/** ✅ Champ GED: idArboGed */
 async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const { baseUrl } = getConfig();
   const uuid = await cnxAuthenticate();
@@ -268,7 +285,6 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const fileBuf = await fs.readFile(filePath);
 
   const parts = [];
-
   parts.push(
     Buffer.from(
       `--${boundary}\r\n` +
@@ -276,7 +292,6 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
         `${String(arboId)}\r\n`
     )
   );
-
   parts.push(
     Buffer.from(
       `--${boundary}\r\n` +
@@ -287,26 +302,18 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   parts.push(fileBuf);
   parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
 
-  const body = Buffer.concat(parts);
-
   const resp = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": `multipart/form-data; boundary=${boundary}`,
-      UUID: uuid
-    },
-    body
+    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, UUID: uuid },
+    body: Buffer.concat(parts)
   });
 
   const text = await resp.text();
   if (!resp.ok) throw new Error(`Upload GED (${resp.status}): ${text}`);
 
-  let out;
-  try {
-    out = JSON.parse(text);
-  } catch {
-    out = { raw: text };
-  }
+  const out = (() => {
+    try { return JSON.parse(text); } catch { return { raw: text }; }
+  })();
 
   const id = out?.Id || out?.id || out?.data?.Id || out?.data?.id || "";
   if (!id) throw new Error(`Id GED introuvable dans la réponse upload: ${text}`);
@@ -314,7 +321,7 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   return String(id);
 }
 
-/** Génère le payload Écritures (3 lignes) */
+/** Payload écritures (3 lignes) */
 function buildEcriturePayload({
   journal,
   referenceGedId,
@@ -373,41 +380,60 @@ function buildEcriturePayload({
     });
   }
 
-  return {
-    journal: String(journal),
-    mois,
-    annee,
-    ReferenceGed: String(referenceGedId),
-    lignesEcriture: lignes
-  };
+  return { journal: String(journal), mois, annee, ReferenceGed: String(referenceGedId), lignesEcriture: lignes };
 }
 
 /** Admin config endpoint */
-app.post("/api/admin/config", (req, res) => {
+app.post("/api/admin/config", (request, response) => {
   try {
-    const { baseUrl, identifiant, motdepasse } = req.body || {};
+    const { baseUrl, identifiant, motdepasse, codeDossier } = request.body || {};
     runtimeConfig.baseUrl = String(baseUrl || "").trim();
     runtimeConfig.identifiant = String(identifiant || "").trim();
     runtimeConfig.motdepasse = String(motdepasse || "").trim();
+    runtimeConfig.codeDossier = String(codeDossier || "").trim();
     cachedUuid = { value: "", at: 0 };
-    res.json({ ok: true });
+    response.json({ ok: true });
   } catch (e) {
-    res.status(400).json({ error: String(e.message || e) });
+    response.status(400).json({ error: String(e.message || e) });
   }
 });
 
-/** Upload PDF -> GED + OCR (returns gedId + prefill + suggestion) */
-app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
+/** Public admin info (sans secrets) : récupérer code dossier */
+app.get("/api/admin/public", (request, response) => {
+  const { codeDossier } = getConfig();
+  response.json({ codeDossier: codeDossier || "" });
+});
+
+/** Admin: ouvrir dossier via /v2/sessions/dossier (body = "CODE") */
+app.post("/api/cnx/session-dossier", async (request, response) => {
+  try {
+    const codeDossier = String(request.body?.codeDossier || "").trim();
+    const out = await cnxOpenDossierSession(codeDossier);
+    response.json({ ok: true, result: out });
+  } catch (e) {
+    response.status(400).json({ error: String(e.message || e) });
+  }
+});
+
+/** Upload PDF -> GED + OCR (+ suggestion auto) */
+app.post("/api/ged/upload", upload.single("pdf"), async (request, response) => {
   let pdfPath = null;
   let pngPath = null;
 
   try {
-    if (!req.file) throw new Error("Aucun PDF");
-    pdfPath = req.file.path;
+    if (!request.file) throw new Error("Aucun PDF");
+    pdfPath = request.file.path;
+
+    // ✅ Dossier requis avant upload GED
+    const { codeDossier } = getConfig();
+    required(codeDossier, "codeDossier (admin)");
+
+    // ✅ Ouvre la session dossier AVANT GED
+    await cnxOpenDossierSession(codeDossier);
 
     const gedId = await cnxUploadGedDocument({
       filePath: pdfPath,
-      filename: req.file.originalname || "ticket.pdf",
+      filename: request.file.originalname || "ticket.pdf",
       arboId: 945
     });
 
@@ -415,54 +441,53 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
     const pngB64 = await fs.readFile(pngPath, { encoding: "base64" });
     const extraction = await openaiExtractFromImage(`data:image/png;base64,${pngB64}`);
 
-    const date_document = extraction.date_document || null;
-    const numero_ticket = extraction.numero_ticket || null;
-    const raison_sociale = extraction.raison_sociale || null;
-
     const montant_ttc = toNumberOrNull(extraction.montant_ttc);
     const montant_ht = toNumberOrNull(extraction.montant_ht);
     const montant_tva = toNumberOrNull(extraction.montant_tva);
 
     const mots_cles = Array.isArray(extraction.mots_cles) ? extraction.mots_cles.map(String) : [];
+    const textForSuggest = [extraction.raison_sociale || "", ...mots_cles].join(" ");
+    const sug = suggestFromText(textForSuggest);
 
-    const suggestionBase = suggestCategoryFromText([raison_sociale, ...mots_cles].join(" "));
-    const guessed = guessVatRateFromAmounts(montant_ht, montant_tva);
+    const guessedRate = guessVatRateFromAmounts(montant_ht, montant_tva);
 
-    const suggestion = { ...suggestionBase, tva_rate: guessed || suggestionBase.tva_rate };
-
-    res.json({
+    response.json({
       ok: true,
       gedId,
       extraction: {
-        date_document,
-        numero_ticket,
-        raison_sociale,
+        date_document: extraction.date_document || null,
+        numero_ticket: extraction.numero_ticket || null,
+        raison_sociale: extraction.raison_sociale || null,
         montant_ttc,
         montant_ht,
         montant_tva,
         mots_cles
       },
-      suggestion
+      suggestion: {
+        categorie_ui: sug.categorie_ui,
+        compteF: sug.compteF,
+        tva_rate: guessedRate || sug.tva_rate
+      }
     });
   } catch (e) {
-    res.status(400).json({ error: String(e.message || e) });
+    response.status(400).json({ error: String(e.message || e) });
   } finally {
     if (pdfPath) await fs.unlink(pdfPath).catch(() => {});
     if (pngPath) await fs.unlink(pngPath).catch(() => {});
   }
 });
 
-/** Build Écritures JSON, using ReferenceGed from GED upload. */
-app.post("/api/receipts/process", upload.none(), async (req, res) => {
+/** Build Écritures JSON */
+app.post("/api/receipts/process", upload.none(), async (request, response) => {
   try {
-    const meta = JSON.parse(req.body.meta || "{}");
+    const meta = JSON.parse(request.body.meta || "{}");
 
-    const journal = req(meta.journal, "journal");
-    const referenceGedId = req(meta.referenceGedId, "referenceGedId");
-    const compteFournisseur = req(meta.compteFournisseur, "compteFournisseur (F...)");
+    const journal = required(meta.journal, "journal");
+    const referenceGedId = required(meta.referenceGedId, "referenceGedId");
+    const compteFournisseur = required(meta.compteFournisseur, "compteFournisseur (F...)");
 
-    const categorie_ui = req(meta.categorie_ui, "categorie_ui");
-    const tva_rate = req(meta.tva_rate, "tva_rate (20/10/0)");
+    const categorie_ui = required(meta.categorie_ui, "categorie_ui");
+    const tva_rate = required(meta.tva_rate, "tva_rate (20/10/0)");
 
     const charges = chargesAccount(categorie_ui, tva_rate);
     if (!charges) throw new Error("Combinaison catégorie/TVA invalide");
@@ -470,12 +495,12 @@ app.post("/api/receipts/process", upload.none(), async (req, res) => {
     const vat = VAT[tva_rate];
     if (!vat) throw new Error("tva_rate invalide (20/10/0)");
 
-    const date_ticket = req(meta.date_ticket ? isoDateOnly(meta.date_ticket) : null, "date_ticket");
-    const numero_ticket = req(meta.numero_ticket || null, "numero_ticket");
-    const raison_sociale = req(meta.raison_sociale || null, "raison_sociale");
+    const date_ticket = required(meta.date_ticket ? isoDateOnly(meta.date_ticket) : null, "date_ticket");
+    const numero_ticket = required(meta.numero_ticket || null, "numero_ticket");
+    const raison_sociale = required(meta.raison_sociale || null, "raison_sociale");
 
-    const ttc = req(toNumberOrNull(meta.montant_ttc), "montant_ttc");
-    const ht = req(toNumberOrNull(meta.ht), "ht");
+    const ttc = required(toNumberOrNull(meta.montant_ttc), "montant_ttc");
+    const ht = required(toNumberOrNull(meta.ht), "ht");
 
     let tva = toNumberOrNull(meta.tva_montant);
     if (tva == null && typeof ttc === "number" && typeof ht === "number") {
@@ -483,7 +508,7 @@ app.post("/api/receipts/process", upload.none(), async (req, res) => {
       if (Number.isFinite(computedTva) && computedTva >= 0) tva = computedTva;
     }
 
-    const ecrituresPayload = buildEcriturePayload({
+    const ecritures = buildEcriturePayload({
       journal,
       referenceGedId,
       dateTicketISO: date_ticket,
@@ -498,9 +523,9 @@ app.post("/api/receipts/process", upload.none(), async (req, res) => {
       tva: tva != null ? Number(tva) : 0
     });
 
-    res.json({ ok: true, ecritures: ecrituresPayload });
+    response.json({ ok: true, ecritures });
   } catch (e) {
-    res.status(400).json({ error: String(e.message || e) });
+    response.status(400).json({ error: String(e.message || e) });
   }
 });
 
