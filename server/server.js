@@ -7,11 +7,22 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
-app.use("/", express.static(new URL("./public", import.meta.url).pathname));
+
+/**
+ * ✅ FIX Render / ESM:
+ * chemin absolu vers server/public + route "/" qui renvoie index.html
+ */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, "public");
+
+app.use(express.static(publicDir));
+app.get("/", (req, res) => res.sendFile(path.join(publicDir, "index.html")));
 
 const upload = multer({ dest: "uploads/" });
 const execFileAsync = promisify(execFile);
@@ -189,6 +200,7 @@ Règles:
     null;
 
   if (!raw) throw new Error("OpenAI: pas de texte exploitable");
+
   try {
     return JSON.parse(raw);
   } catch {
@@ -372,7 +384,7 @@ function buildEcriturePayload({
   };
 }
 
-/** ===== Admin (option 1 : pas d’affichage des secrets) ===== */
+/** ===== Admin (option 1) ===== */
 app.post("/api/admin/config", (req, res) => {
   try {
     const { baseUrl, identifiant, motdepasse } = req.body || {};
@@ -395,14 +407,12 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
     if (!req.file) throw new Error("Aucun PDF");
     pdfPath = req.file.path;
 
-    // 1) Upload GED (arbo 945)
     const gedId = await cnxUploadGedDocument({
       filePath: pdfPath,
       filename: req.file.originalname || "ticket.pdf",
       arboId: 945
     });
 
-    // 2) OCR sur le même PDF
     pngPath = await pdfFirstPageToPng(pdfPath);
     const pngB64 = await fs.readFile(pngPath, { encoding: "base64" });
     const extraction = await openaiExtractFromImage(`data:image/png;base64,${pngB64}`);
