@@ -7,22 +7,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import crypto from "node:crypto";
-import { fileURLToPath } from "node:url";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
-
-/**
- * ✅ FIX Render / ESM:
- * chemin absolu vers server/public + route "/" qui renvoie index.html
- */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicDir = path.join(__dirname, "public");
-
-app.use(express.static(publicDir));
-app.get("/", (req, res) => res.sendFile(path.join(publicDir, "index.html")));
+app.use("/", express.static(new URL("./public", import.meta.url).pathname));
 
 const upload = multer({ dest: "uploads/" });
 const execFileAsync = promisify(execFile);
@@ -55,9 +44,7 @@ function toNumberOrNull(v) {
   return null;
 }
 
-function round2(x) {
-  return Math.round((x + Number.EPSILON) * 100) / 100;
-}
+function round2(x) { return Math.round((x + Number.EPSILON) * 100) / 100; }
 
 function isoDateOnly(d) {
   const dt = new Date(d);
@@ -72,7 +59,7 @@ function isoDateOnly(d) {
 const VAT = {
   "20": { code_tva: "TN", compte_tva_44566: "44566200" },
   "10": { code_tva: "TI", compte_tva_44566: "44566100" },
-  "0": { code_tva: "", compte_tva_44566: "" }
+  "0":  { code_tva: "",   compte_tva_44566: "" }
 };
 
 function chargesAccount(categoryKey, vatRate) {
@@ -81,52 +68,34 @@ function chargesAccount(categoryKey, vatRate) {
       if (vatRate === "20") return "60631000";
       if (vatRate === "10") return "60630000";
       return "";
-    case "carburant":
-      return vatRate === "20" ? "60614000" : "";
-    case "repas_pro":
-      return vatRate === "10" ? "62511000" : "";
-    case "repas":
-      return vatRate === "0" ? "62510000" : "";
-    case "papeterie":
-      return vatRate === "20" ? "60640000" : "";
-    case "peages":
-      return vatRate === "20" ? "62512000" : "";
-    case "parking":
-      return vatRate === "20" ? "62512000" : "";
-    default:
-      return "";
+    case "carburant": return vatRate === "20" ? "60614000" : "";
+    case "repas_pro": return vatRate === "10" ? "62511000" : "";
+    case "repas": return vatRate === "0" ? "62510000" : "";
+    case "papeterie": return vatRate === "20" ? "60640000" : "";
+    case "peages": return vatRate === "20" ? "62512000" : "";
+    case "parking": return vatRate === "20" ? "62512000" : "";
+    default: return "";
   }
 }
 
-/** ===== Suggestion depuis keywords OCR ===== */
+/** ===== Catégorie suggérée depuis keywords OCR ===== */
 function suggestCategoryFromText(text) {
   const t = (text || "").toLowerCase();
-  const hasAny = (arr) => arr.some((k) => t.includes(k));
+  const hasAny = (arr) => arr.some(k => t.includes(k));
 
-  if (hasAny(["repas", "restaurant", "café", "cafe", "brasserie", "bistrot", "menu"])) {
+  if (hasAny(["repas","restaurant","café","cafe","brasserie","bistrot","menu"])) {
     return { categorie_ui: "repas_pro", journal_ttc: "FREPAS", tva_rate: "10" };
   }
-  if (
-    hasAny([
-      "carburant",
-      "gasoil",
-      "gazole",
-      "go",
-      "super",
-      "sp",
-      "essence",
-      "station-service"
-    ])
-  ) {
+  if (hasAny(["carburant","gasoil","gazole","go","super","sp","essence","station-service"])) {
     return { categorie_ui: "carburant", journal_ttc: "FCARBU", tva_rate: "20" };
   }
-  if (hasAny(["parking", "stationnement", "park"])) {
+  if (hasAny(["parking","stationnement","park"])) {
     return { categorie_ui: "parking", journal_ttc: "FPARKING", tva_rate: "20" };
   }
-  if (hasAny(["peage", "péage", "asf", "escota", "aprr", "sanef"])) {
+  if (hasAny(["peage","péage","asf","escota","aprr","sanef"])) {
     return { categorie_ui: "peages", journal_ttc: "FPEAGE", tva_rate: "20" };
   }
-  // sinon FDIVERS, et ne force pas la catégorie (UI au choix)
+  // sinon FDIVERS et on ne force pas la catégorie (UI reste au choix utilisateur)
   return { categorie_ui: null, journal_ttc: "FDIVERS", tva_rate: null };
 }
 
@@ -134,23 +103,21 @@ function guessVatRateFromAmounts(ht, tva) {
   if (typeof ht !== "number" || !Number.isFinite(ht) || ht <= 0) return null;
   if (typeof tva !== "number" || !Number.isFinite(tva) || tva < 0) return null;
   const r = tva / ht;
-  if (Math.abs(r - 0.2) < 0.03) return "20";
-  if (Math.abs(r - 0.1) < 0.02) return "10";
+  if (Math.abs(r - 0.20) < 0.03) return "20";
+  if (Math.abs(r - 0.10) < 0.02) return "10";
   if (tva === 0) return "0";
   return null;
 }
 
-/** ===== PDF -> PNG (poppler) ===== */
+/** Convert PDF first page to PNG using pdftoppm (poppler-utils) */
 async function pdfFirstPageToPng(pdfPath) {
   const outBase = path.join("uploads", crypto.randomUUID());
   await execFileAsync("pdftoppm", ["-f", "1", "-l", "1", "-png", pdfPath, outBase]);
   return `${outBase}-1.png`;
 }
 
-/** ===== OpenAI OCR ===== */
 async function openaiExtractFromImage(dataUrl) {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY manquante (env)");
-
   const prompt = `
 Tu extrais les infos d'un ticket/facture.
 Renvoie STRICTEMENT un JSON valide (pas de texte autour) :
@@ -161,30 +128,29 @@ Renvoie STRICTEMENT un JSON valide (pas de texte autour) :
   "montant_ht": 100.00,
   "montant_tva": 23.45,
   "raison_sociale": "Nom visible sur le ticket",
-  "mots_cles": ["repas","restaurant","parking","peage","gasoil","super","sp","stationnement"]
+  "mots_cles": ["repas","restaurant","parking","peage","gasoil","super","sp","stationnement", "..."]
 }
+
 Règles:
 - nombres en décimal (point).
 - si absent -> null.
-- "mots_cles" : 0 à 10 mots courts réellement présents sur le ticket, utiles pour classer.`.trim();
+- "mots_cles" : 0 à 10 mots courts réellement présents sur le ticket, utiles pour classer (repas/carburant/parking/péage).`.trim();
 
   const body = {
     model: OPENAI_MODEL,
-    input: [
-      {
-        role: "user",
-        content: [
-          { type: "input_text", text: prompt },
-          { type: "input_image", image_url: dataUrl }
-        ]
-      }
-    ]
+    input: [{
+      role: "user",
+      content: [
+        { type: "input_text", text: prompt },
+        { type: "input_image", image_url: dataUrl }
+      ]
+    }]
   };
 
   const resp = await fetch(OPENAI_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(body)
@@ -200,15 +166,10 @@ Règles:
     null;
 
   if (!raw) throw new Error("OpenAI: pas de texte exploitable");
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error(`OpenAI: JSON invalide: ${raw}`);
-  }
+  try { return JSON.parse(raw); } catch { throw new Error(`OpenAI: JSON invalide: ${raw}`); }
 }
 
-/** ===== CNX Auth + GED ===== */
+/** ===== CNX API calls (auth + upload GED) ===== */
 let cachedUuid = { value: "", at: 0 };
 
 function getConfig() {
@@ -225,8 +186,9 @@ async function cnxAuthenticate() {
   req(identifiant, "CNX_IDENTIFIANT");
   req(motdepasse, "CNX_MOTDEPASSE");
 
-  // cache 10 minutes
-  if (cachedUuid.value && Date.now() - cachedUuid.at < 10 * 60 * 1000) return cachedUuid.value;
+  if (cachedUuid.value && (Date.now() - cachedUuid.at) < 10 * 60 * 1000) {
+    return cachedUuid.value;
+  }
 
   const url = `${baseUrl.replace(/\/$/, "")}/v1/authentification`;
 
@@ -240,12 +202,9 @@ async function cnxAuthenticate() {
   if (!resp.ok) throw new Error(`Authentification CNX (${resp.status}): ${text}`);
 
   let out;
-  try {
-    out = JSON.parse(text);
-  } catch {
-    out = { raw: text };
-  }
+  try { out = JSON.parse(text); } catch { out = { raw: text }; }
 
+  // Swagger V2 montre que la propriété attendue est "UUID" dans le modèle Connexion. citeturn7view1
   const uuid = out?.UUID || out?.uuid || out?.data?.UUID || out?.data?.uuid || "";
   if (!uuid) throw new Error(`UUID introuvable dans la réponse auth: ${text}`);
 
@@ -256,12 +215,13 @@ async function cnxAuthenticate() {
 async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const { baseUrl } = getConfig();
   const uuid = await cnxAuthenticate();
+
   const url = `${baseUrl.replace(/\/$/, "")}/v1/ged/documents`;
 
-  const boundary = "----WebKitFormBoundary" + crypto.randomUUID().replace(/-/g, "");
+  const boundary = "----WebKitFormBoundary" + crypto.randomUUID().replace(/-/g,"");
   const fileBuf = await fs.readFile(filePath);
 
-  // compat: on envoie plusieurs alias pour l'arbo
+  // on envoie plusieurs alias de champ arbo pour compatibilité
   const fields = [
     ["arboId", String(arboId)],
     ["idArbo", String(arboId)],
@@ -269,23 +229,19 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   ];
 
   const parts = [];
-  for (const [k, v] of fields) {
-    parts.push(
-      Buffer.from(
-        `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="${k}"\r\n\r\n` +
-          `${v}\r\n`
-      )
-    );
+  for (const [k,v] of fields) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="${k}"\r\n\r\n` +
+      `${v}\r\n`
+    ));
   }
 
-  parts.push(
-    Buffer.from(
-      `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-        `Content-Type: application/pdf\r\n\r\n`
-    )
-  );
+  parts.push(Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+    `Content-Type: application/pdf\r\n\r\n`
+  ));
   parts.push(fileBuf);
   parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
 
@@ -295,7 +251,7 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
     method: "POST",
     headers: {
       "Content-Type": `multipart/form-data; boundary=${boundary}`,
-      UUID: uuid
+      "UUID": uuid
     },
     body
   });
@@ -304,87 +260,39 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   if (!resp.ok) throw new Error(`Upload GED (${resp.status}): ${text}`);
 
   let out;
-  try {
-    out = JSON.parse(text);
-  } catch {
-    out = { raw: text };
-  }
+  try { out = JSON.parse(text); } catch { out = { raw: text }; }
 
   const id = out?.Id || out?.id || out?.data?.Id || out?.data?.id || "";
   if (!id) throw new Error(`Id GED introuvable dans la réponse upload: ${text}`);
-
   return String(id);
 }
 
-/** ===== Payload écritures ===== */
+/** Génère le payload Écritures (3 lignes) */
 function buildEcriturePayload({
-  journal,
-  referenceGedId,
-  dateTicketISO,
-  numeroTicket,
-  compteFournisseur,
-  raisonSociale,
-  compteCharges,
-  codeTVA,
-  compteTVA44566,
-  ttc,
-  ht,
-  tva,
-  numeroPiece = "001"
+  journal, referenceGedId, dateTicketISO, numeroTicket,
+  compteFournisseur, raisonSociale, compteCharges,
+  codeTVA, compteTVA44566, ttc, ht, tva, numeroPiece="001"
 }) {
   const dt = new Date(dateTicketISO);
   if (!Number.isFinite(dt.getTime())) throw new Error("dateTicketISO invalide");
-
   const annee = dt.getFullYear();
   const mois = dt.getMonth() + 1;
   const jour = dt.getDate();
 
-  const lignesEcriture = [
-    {
-      jour,
-      numeroPiece,
-      numeroFacture: String(numeroTicket),
-      compte: String(compteFournisseur),
-      libelle: String(raisonSociale),
-      credit: round2(ttc),
-      debit: 0,
-      modeReglement: ""
-    },
-    {
-      jour,
-      numeroPiece,
-      numeroFacture: String(numeroTicket),
-      compte: String(compteCharges),
-      libelle: String(raisonSociale),
-      credit: 0,
-      debit: round2(ht),
-      ...(codeTVA ? { codeTVA: String(codeTVA) } : {})
-    }
+  const lignes = [
+    { jour, numeroPiece, numeroFacture:String(numeroTicket), compte:String(compteFournisseur), libelle:String(raisonSociale), credit: round2(ttc), debit: 0, modeReglement: "" },
+    { jour, numeroPiece, numeroFacture:String(numeroTicket), compte:String(compteCharges), libelle:String(raisonSociale), credit: 0, debit: round2(ht), ...(codeTVA ? { codeTVA: String(codeTVA) } : {}) }
   ];
 
   if (typeof tva === "number" && Number.isFinite(tva) && tva > 0) {
     if (!compteTVA44566) throw new Error("compteTVA44566 manquant");
-    lignesEcriture.push({
-      jour,
-      numeroPiece,
-      numeroFacture: String(numeroTicket),
-      compte: String(compteTVA44566),
-      libelle: String(raisonSociale),
-      credit: 0,
-      debit: round2(tva)
-    });
+    lignes.push({ jour, numeroPiece, numeroFacture:String(numeroTicket), compte:String(compteTVA44566), libelle:String(raisonSociale), credit: 0, debit: round2(tva) });
   }
 
-  return {
-    journal: String(journal),
-    mois,
-    annee,
-    ReferenceGed: String(referenceGedId),
-    lignesEcriture
-  };
+  return { journal:String(journal), mois, annee, ReferenceGed: String(referenceGedId), lignesEcriture: lignes };
 }
 
-/** ===== Admin (option 1) ===== */
+/** Admin config endpoint */
 app.post("/api/admin/config", (req, res) => {
   try {
     const { baseUrl, identifiant, motdepasse } = req.body || {};
@@ -398,21 +306,17 @@ app.post("/api/admin/config", (req, res) => {
   }
 });
 
-/** ===== Étape 1: Upload GED + OCR ===== */
+/** Upload PDF -> GED + OCR (returns gedId + prefill + suggestion) */
 app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
   let pdfPath = null;
   let pngPath = null;
-
   try {
     if (!req.file) throw new Error("Aucun PDF");
     pdfPath = req.file.path;
 
-    const gedId = await cnxUploadGedDocument({
-      filePath: pdfPath,
-      filename: req.file.originalname || "ticket.pdf",
-      arboId: 945
-    });
+    const gedId = await cnxUploadGedDocument({ filePath: pdfPath, filename: req.file.originalname || "ticket.pdf", arboId: 945 });
 
+    // OCR sur le même PDF
     pngPath = await pdfFirstPageToPng(pdfPath);
     const pngB64 = await fs.readFile(pngPath, { encoding: "base64" });
     const extraction = await openaiExtractFromImage(`data:image/png;base64,${pngB64}`);
@@ -428,11 +332,11 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
     const mots_cles = Array.isArray(extraction.mots_cles) ? extraction.mots_cles.map(String) : [];
 
     const suggestionBase = suggestCategoryFromText([raison_sociale, ...mots_cles].join(" "));
-    const guessedRate = guessVatRateFromAmounts(montant_ht, montant_tva);
+    const guessed = guessVatRateFromAmounts(montant_ht, montant_tva);
 
     const suggestion = {
       ...suggestionBase,
-      tva_rate: guessedRate || suggestionBase.tva_rate
+      tva_rate: guessed || suggestionBase.tva_rate
     };
 
     res.json({
@@ -452,12 +356,12 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });
   } finally {
-    if (pdfPath) await fs.unlink(pdfPath).catch(() => {});
-    if (pngPath) await fs.unlink(pngPath).catch(() => {});
+    if (pdfPath) await fs.unlink(pdfPath).catch(()=>{});
+    if (pngPath) await fs.unlink(pngPath).catch(()=>{});
   }
 });
 
-/** ===== Étape 2: Générer écritures ===== */
+/** Build Écritures JSON, using ReferenceGed from GED upload. */
 app.post("/api/receipts/process", upload.none(), async (req, res) => {
   try {
     const meta = JSON.parse(req.body.meta || "{}");
@@ -469,8 +373,8 @@ app.post("/api/receipts/process", upload.none(), async (req, res) => {
     const categorie_ui = req(meta.categorie_ui, "categorie_ui");
     const tva_rate = req(meta.tva_rate, "tva_rate (20/10/0)");
 
-    const compteCharges = chargesAccount(categorie_ui, tva_rate);
-    if (!compteCharges) throw new Error("Combinaison catégorie/TVA invalide");
+    const charges = chargesAccount(categorie_ui, tva_rate);
+    if (!charges) throw new Error("Combinaison catégorie/TVA invalide");
 
     const vat = VAT[tva_rate];
     if (!vat) throw new Error("tva_rate invalide (20/10/0)");
@@ -484,18 +388,18 @@ app.post("/api/receipts/process", upload.none(), async (req, res) => {
 
     let tva = toNumberOrNull(meta.tva_montant);
     if (tva == null && typeof ttc === "number" && typeof ht === "number") {
-      const computed = ttc - ht;
-      if (Number.isFinite(computed) && computed >= 0) tva = computed;
+      const computedTva = ttc - ht;
+      if (Number.isFinite(computedTva) && computedTva >= 0) tva = computedTva;
     }
 
-    const ecritures = buildEcriturePayload({
+    const ecrituresPayload = buildEcriturePayload({
       journal,
       referenceGedId,
       dateTicketISO: date_ticket,
       numeroTicket: numero_ticket,
       compteFournisseur,
       raisonSociale: raison_sociale,
-      compteCharges,
+      compteCharges: charges,
       codeTVA: vat.code_tva,
       compteTVA44566: vat.compte_tva_44566,
       ttc: Number(ttc),
@@ -503,7 +407,7 @@ app.post("/api/receipts/process", upload.none(), async (req, res) => {
       tva: tva != null ? Number(tva) : 0
     });
 
-    res.json({ ok: true, ecritures });
+    res.json({ ok:true, ecritures: ecrituresPayload });
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });
   }
