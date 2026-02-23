@@ -13,26 +13,26 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-/** ✅ FIX Render/ESM static */
+/** Static (Render-friendly, ESM) */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "public");
 app.use(express.static(publicDir));
-app.get("/", (request, response) => response.sendFile(path.join(publicDir, "index.html")));
+app.get("/", (req, res) => res.sendFile(path.join(publicDir, "index.html")));
 
 const upload = multer({ dest: "uploads/" });
 const execFileAsync = promisify(execFile);
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_URL = "https://api.openai.com/v1/responses";
-const OPENAI_MODEL = "gpt-4.1-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
-/** Config CNX (env > mémoire) */
+/** Runtime config (env > admin UI) */
 let runtimeConfig = {
-  baseUrl: process.env.CNX_BASE_URL || "",
+  baseUrl: process.env.CNX_BASE_URL || "",         // ex: https://isuiteacd.suiteexpert.fr/cnx/api
   identifiant: process.env.CNX_IDENTIFIANT || "",
   motdepasse: process.env.CNX_MOTDEPASSE || "",
-  codeDossier: process.env.CNX_CODE_DOSSIER || "" // requis
+  codeDossier: process.env.CNX_CODE_DOSSIER || ""  // ex: DA_CONSEIL (requis avant GED)
 };
 
 function required(v, label) {
@@ -95,7 +95,7 @@ function chargesAccount(categoryKey, vatRate) {
   }
 }
 
-/** ===== Mapping auto catégorie + compte fournisseur (F...) ===== */
+/** ===== Mapping auto (OCR keywords) ===== */
 function suggestFromText(text) {
   const t = (text || "").toLowerCase();
   const hasAny = (arr) => arr.some((k) => t.includes(k));
@@ -125,14 +125,14 @@ function guessVatRateFromAmounts(ht, tva) {
   return null;
 }
 
-/** PDF -> PNG */
+/** ===== PDF -> PNG (poppler) ===== */
 async function pdfFirstPageToPng(pdfPath) {
   const outBase = path.join("uploads", crypto.randomUUID());
   await execFileAsync("pdftoppm", ["-f", "1", "-l", "1", "-png", pdfPath, outBase]);
   return `${outBase}-1.png`;
 }
 
-/** OpenAI JSON parsing robuste */
+/** ===== OpenAI: parse JSON (strip ```json fences) ===== */
 function parseOpenAIJson(raw) {
   const cleaned = String(raw || "")
     .trim()
@@ -166,7 +166,11 @@ Renvoie STRICTEMENT un JSON valide :
   "montant_tva": 23.45,
   "raison_sociale": "Nom visible sur le ticket",
   "mots_cles": ["repas","restaurant","parking","peage","gasoil","super","sp","stationnement"]
-}`.trim();
+}
+Règles:
+- nombres en décimal (point).
+- si absent -> null.
+- mots_cles: 0 à 10 mots utiles réellement visibles sur le ticket.`.trim();
 
   const body = {
     model: OPENAI_MODEL,
@@ -203,7 +207,7 @@ Renvoie STRICTEMENT un JSON valide :
   return parseOpenAIJson(raw);
 }
 
-/** ===== CNX auth + session dossier + GED upload ===== */
+/** ===== CNX auth + session dossier + GED + compta ===== */
 let cachedUuid = { value: "", at: 0 };
 
 function getConfig() {
@@ -224,7 +228,6 @@ async function cnxAuthenticate() {
   if (cachedUuid.value && Date.now() - cachedUuid.at < 10 * 60 * 1000) return cachedUuid.value;
 
   const url = `${baseUrl.replace(/\/$/, "")}/v1/authentification`;
-
   const resp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -234,10 +237,7 @@ async function cnxAuthenticate() {
   const text = await resp.text();
   if (!resp.ok) throw new Error(`Authentification CNX (${resp.status}): ${text}`);
 
-  const out = (() => {
-    try { return JSON.parse(text); } catch { return { raw: text }; }
-  })();
-
+  const out = (() => { try { return JSON.parse(text); } catch { return { raw: text }; } })();
   const uuid = out?.UUID || out?.uuid || out?.data?.UUID || out?.data?.uuid || "";
   if (!uuid) throw new Error(`UUID introuvable dans la réponse auth: ${text}`);
 
@@ -245,19 +245,13 @@ async function cnxAuthenticate() {
   return cachedUuid.value;
 }
 
-/**
- * ✅ EXACTEMENT comme ton curl :
- * - accept: text/plain
- * - Content-Type: application/json-patch+json
- * - body: "\"DA_CONSEIL\"" (JSON string)
- */
+/** EXACT curl: Content-Type application/json-patch+json, body = "DA_CONSEIL" */
 async function cnxOpenDossierSession(codeDossier) {
   const { baseUrl } = getConfig();
   const uuid = await cnxAuthenticate();
-
   const cd = required(codeDossier, "codeDossier");
-  const url = `${baseUrl.replace(/\/$/, "")}/v2/sessions/dossier`;
 
+  const url = `${baseUrl.replace(/\/$/, "")}/v2/sessions/dossier`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
@@ -265,40 +259,33 @@ async function cnxOpenDossierSession(codeDossier) {
       UUID: uuid,
       "Content-Type": "application/json-patch+json"
     },
-    body: JSON.stringify(String(cd)) // => "DA_CONSEIL"
+    body: JSON.stringify(String(cd))
   });
 
   const text = await resp.text();
   if (!resp.ok) throw new Error(`Session dossier CNX (${resp.status}): ${text}`);
-
-  // souvent text/plain => on renvoie le texte
   return { raw: text };
 }
 
-/** ✅ Champ GED: idArboGed */
 async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const { baseUrl } = getConfig();
   const uuid = await cnxAuthenticate();
-  const url = `${baseUrl.replace(/\/$/, "")}/v1/ged/documents`;
 
+  const url = `${baseUrl.replace(/\/$/, "")}/v1/ged/documents`;
   const boundary = "----WebKitFormBoundary" + crypto.randomUUID().replace(/-/g, "");
   const fileBuf = await fs.readFile(filePath);
 
   const parts = [];
-  parts.push(
-    Buffer.from(
-      `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="idArboGed"\r\n\r\n` +
-        `${String(arboId)}\r\n`
-    )
-  );
-  parts.push(
-    Buffer.from(
-      `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-        `Content-Type: application/pdf\r\n\r\n`
-    )
-  );
+  parts.push(Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="idArboGed"\r\n\r\n` +
+    `${String(arboId)}\r\n`
+  ));
+  parts.push(Buffer.from(
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+    `Content-Type: application/pdf\r\n\r\n`
+  ));
   parts.push(fileBuf);
   parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
 
@@ -311,14 +298,35 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const text = await resp.text();
   if (!resp.ok) throw new Error(`Upload GED (${resp.status}): ${text}`);
 
-  const out = (() => {
-    try { return JSON.parse(text); } catch { return { raw: text }; }
-  })();
-
+  const out = (() => { try { return JSON.parse(text); } catch { return { raw: text }; } })();
   const id = out?.Id || out?.id || out?.data?.Id || out?.data?.id || "";
   if (!id) throw new Error(`Id GED introuvable dans la réponse upload: ${text}`);
 
   return String(id);
+}
+
+/** POST vers le logiciel comptable */
+async function cnxPostEcriture(ecrituresPayload) {
+  const { baseUrl, codeDossier } = getConfig();
+  const uuid = await cnxAuthenticate();
+
+  required(codeDossier, "codeDossier (admin)");
+  await cnxOpenDossierSession(codeDossier);
+
+  const url = `${baseUrl.replace(/\/$/, "")}/compta/ecriture`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      Accept: "text/plain",
+      "Content-Type": "application/json",
+      UUID: uuid
+    },
+    body: JSON.stringify(ecrituresPayload)
+  });
+
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`Envoi écriture (${resp.status}): ${text}`);
+  return { raw: text };
 }
 
 /** Payload écritures (3 lignes) */
@@ -380,60 +388,61 @@ function buildEcriturePayload({
     });
   }
 
-  return { journal: String(journal), mois, annee, ReferenceGed: String(referenceGedId), lignesEcriture: lignes };
+  return {
+    journal: String(journal),
+    mois,
+    annee,
+    ReferenceGed: String(referenceGedId),
+    lignesEcriture: lignes
+  };
 }
 
-/** Admin config endpoint */
-app.post("/api/admin/config", (request, response) => {
+/** ===== Admin endpoints ===== */
+app.post("/api/admin/config", (req, res) => {
   try {
-    const { baseUrl, identifiant, motdepasse, codeDossier } = request.body || {};
+    const { baseUrl, identifiant, motdepasse, codeDossier } = req.body || {};
     runtimeConfig.baseUrl = String(baseUrl || "").trim();
     runtimeConfig.identifiant = String(identifiant || "").trim();
     runtimeConfig.motdepasse = String(motdepasse || "").trim();
     runtimeConfig.codeDossier = String(codeDossier || "").trim();
     cachedUuid = { value: "", at: 0 };
-    response.json({ ok: true });
+    res.json({ ok: true });
   } catch (e) {
-    response.status(400).json({ error: String(e.message || e) });
+    res.status(400).json({ error: String(e.message || e) });
   }
 });
 
-/** Public admin info (sans secrets) : récupérer code dossier */
-app.get("/api/admin/public", (request, response) => {
+app.get("/api/admin/public", (req, res) => {
   const { codeDossier } = getConfig();
-  response.json({ codeDossier: codeDossier || "" });
+  res.json({ codeDossier: codeDossier || "" });
 });
 
-/** Admin: ouvrir dossier via /v2/sessions/dossier (body = "CODE") */
-app.post("/api/cnx/session-dossier", async (request, response) => {
+app.post("/api/cnx/session-dossier", async (req, res) => {
   try {
-    const codeDossier = String(request.body?.codeDossier || "").trim();
+    const codeDossier = String(req.body?.codeDossier || "").trim();
     const out = await cnxOpenDossierSession(codeDossier);
-    response.json({ ok: true, result: out });
+    res.json({ ok: true, result: out });
   } catch (e) {
-    response.status(400).json({ error: String(e.message || e) });
+    res.status(400).json({ error: String(e.message || e) });
   }
 });
 
-/** Upload PDF -> GED + OCR (+ suggestion auto) */
-app.post("/api/ged/upload", upload.single("pdf"), async (request, response) => {
+/** ===== Upload PDF -> GED + OCR ===== */
+app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
   let pdfPath = null;
   let pngPath = null;
 
   try {
-    if (!request.file) throw new Error("Aucun PDF");
-    pdfPath = request.file.path;
+    if (!req.file) throw new Error("Aucun PDF");
+    pdfPath = req.file.path;
 
-    // ✅ Dossier requis avant upload GED
     const { codeDossier } = getConfig();
     required(codeDossier, "codeDossier (admin)");
-
-    // ✅ Ouvre la session dossier AVANT GED
     await cnxOpenDossierSession(codeDossier);
 
     const gedId = await cnxUploadGedDocument({
       filePath: pdfPath,
-      filename: request.file.originalname || "ticket.pdf",
+      filename: req.file.originalname || "ticket.pdf",
       arboId: 945
     });
 
@@ -448,10 +457,9 @@ app.post("/api/ged/upload", upload.single("pdf"), async (request, response) => {
     const mots_cles = Array.isArray(extraction.mots_cles) ? extraction.mots_cles.map(String) : [];
     const textForSuggest = [extraction.raison_sociale || "", ...mots_cles].join(" ");
     const sug = suggestFromText(textForSuggest);
-
     const guessedRate = guessVatRateFromAmounts(montant_ht, montant_tva);
 
-    response.json({
+    res.json({
       ok: true,
       gedId,
       extraction: {
@@ -470,17 +478,17 @@ app.post("/api/ged/upload", upload.single("pdf"), async (request, response) => {
       }
     });
   } catch (e) {
-    response.status(400).json({ error: String(e.message || e) });
+    res.status(400).json({ error: String(e.message || e) });
   } finally {
     if (pdfPath) await fs.unlink(pdfPath).catch(() => {});
     if (pngPath) await fs.unlink(pngPath).catch(() => {});
   }
 });
 
-/** Build Écritures JSON */
-app.post("/api/receipts/process", upload.none(), async (request, response) => {
+/** ===== Submit: build + send to compta ===== */
+app.post("/api/receipts/submit", upload.none(), async (req, res) => {
   try {
-    const meta = JSON.parse(request.body.meta || "{}");
+    const meta = JSON.parse(req.body.meta || "{}");
 
     const journal = required(meta.journal, "journal");
     const referenceGedId = required(meta.referenceGedId, "referenceGedId");
@@ -508,7 +516,7 @@ app.post("/api/receipts/process", upload.none(), async (request, response) => {
       if (Number.isFinite(computedTva) && computedTva >= 0) tva = computedTva;
     }
 
-    const ecritures = buildEcriturePayload({
+    const payload = buildEcriturePayload({
       journal,
       referenceGedId,
       dateTicketISO: date_ticket,
@@ -523,9 +531,11 @@ app.post("/api/receipts/process", upload.none(), async (request, response) => {
       tva: tva != null ? Number(tva) : 0
     });
 
-    response.json({ ok: true, ecritures });
+    const result = await cnxPostEcriture(payload);
+
+    res.json({ ok: true, message: "Écriture envoyée", result });
   } catch (e) {
-    response.status(400).json({ error: String(e.message || e) });
+    res.status(400).json({ error: String(e.message || e) });
   }
 });
 
