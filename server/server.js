@@ -69,7 +69,7 @@ function isoDateOnly(d) {
 const VAT = {
   "20": { code_tva: "TN", compte_tva_44566: "44566200" },
   "10": { code_tva: "TI", compte_tva_44566: "44566100" },
-  "0": { code_tva: "", compte_tva_44566: "" }
+  "0":  { code_tva: "",   compte_tva_44566: "" }
 };
 
 function chargesAccount(categoryKey, vatRate) {
@@ -132,7 +132,7 @@ async function pdfFirstPageToPng(pdfPath) {
   return `${outBase}-1.png`;
 }
 
-/** ===== OpenAI: parse JSON (strip ```json fences) ===== */
+/** ===== OpenAI parsing robuste ===== */
 function parseOpenAIJson(raw) {
   const cleaned = String(raw || "")
     .trim()
@@ -145,11 +145,8 @@ function parseOpenAIJson(raw) {
   if (i === -1 || j === -1 || j <= i) throw new Error(`OpenAI: JSON introuvable: ${cleaned}`);
 
   const jsonOnly = cleaned.slice(i, j + 1);
-  try {
-    return JSON.parse(jsonOnly);
-  } catch {
-    throw new Error(`OpenAI: JSON invalide: ${jsonOnly}`);
-  }
+  try { return JSON.parse(jsonOnly); }
+  catch { throw new Error(`OpenAI: JSON invalide: ${jsonOnly}`); }
 }
 
 async function openaiExtractFromImage(dataUrl) {
@@ -166,19 +163,21 @@ Renvoie STRICTEMENT un JSON valide :
   "montant_tva": 23.45,
   "raison_sociale": "Nom visible sur le ticket",
   "mots_cles": ["repas","restaurant","parking","peage","gasoil","super","sp","stationnement"]
-}`.trim();
+}
+Règles:
+- nombres en décimal (point).
+- si absent -> null.
+- mots_cles: 0 à 10 mots utiles réellement visibles.`.trim();
 
   const body = {
     model: OPENAI_MODEL,
-    input: [
-      {
-        role: "user",
-        content: [
-          { type: "input_text", text: prompt },
-          { type: "input_image", image_url: dataUrl }
-        ]
-      }
-    ]
+    input: [{
+      role: "user",
+      content: [
+        { type: "input_text", text: prompt },
+        { type: "input_image", image_url: dataUrl }
+      ]
+    }]
   };
 
   const resp = await fetch(OPENAI_URL, {
@@ -203,7 +202,7 @@ Renvoie STRICTEMENT un JSON valide :
   return parseOpenAIJson(raw);
 }
 
-/** ===== CNX auth + session dossier + GED + compta ===== */
+/** ===== CNX calls ===== */
 let cachedUuid = { value: "", at: 0 };
 
 function getConfig() {
@@ -301,7 +300,7 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   return String(id);
 }
 
-/** ✅ FIX 404: endpoint V1 */
+/** ✅ Endpoint compta V1 */
 async function cnxPostEcriture(ecrituresPayload) {
   const { baseUrl, codeDossier } = getConfig();
   const uuid = await cnxAuthenticate();
@@ -326,72 +325,29 @@ async function cnxPostEcriture(ecrituresPayload) {
   return { raw: text };
 }
 
-/** Payload écritures (3 lignes) */
+/** Payload écritures */
 function buildEcriturePayload({
-  journal,
-  referenceGedId,
-  dateTicketISO,
-  numeroTicket,
-  compteFournisseur,
-  raisonSociale,
-  compteCharges,
-  codeTVA,
-  compteTVA44566,
-  ttc,
-  ht,
-  tva,
-  numeroPiece = "001"
+  journal, referenceGedId, dateTicketISO, numeroTicket,
+  compteFournisseur, raisonSociale, compteCharges,
+  codeTVA, compteTVA44566, ttc, ht, tva, numeroPiece = "001"
 }) {
   const dt = new Date(dateTicketISO);
   if (!Number.isFinite(dt.getTime())) throw new Error("dateTicketISO invalide");
-
   const annee = dt.getFullYear();
   const mois = dt.getMonth() + 1;
   const jour = dt.getDate();
 
   const lignes = [
-    {
-      jour,
-      numeroPiece,
-      numeroFacture: String(numeroTicket),
-      compte: String(compteFournisseur),
-      libelle: String(raisonSociale),
-      credit: round2(ttc),
-      debit: 0,
-      modeReglement: ""
-    },
-    {
-      jour,
-      numeroPiece,
-      numeroFacture: String(numeroTicket),
-      compte: String(compteCharges),
-      libelle: String(raisonSociale),
-      credit: 0,
-      debit: round2(ht),
-      ...(codeTVA ? { codeTVA: String(codeTVA) } : {})
-    }
+    { jour, numeroPiece, numeroFacture: String(numeroTicket), compte: String(compteFournisseur), libelle: String(raisonSociale), credit: round2(ttc), debit: 0, modeReglement: "" },
+    { jour, numeroPiece, numeroFacture: String(numeroTicket), compte: String(compteCharges), libelle: String(raisonSociale), credit: 0, debit: round2(ht), ...(codeTVA ? { codeTVA: String(codeTVA) } : {}) }
   ];
 
   if (typeof tva === "number" && Number.isFinite(tva) && tva > 0) {
     if (!compteTVA44566) throw new Error("compteTVA44566 manquant");
-    lignes.push({
-      jour,
-      numeroPiece,
-      numeroFacture: String(numeroTicket),
-      compte: String(compteTVA44566),
-      libelle: String(raisonSociale),
-      credit: 0,
-      debit: round2(tva)
-    });
+    lignes.push({ jour, numeroPiece, numeroFacture: String(numeroTicket), compte: String(compteTVA44566), libelle: String(raisonSociale), credit: 0, debit: round2(tva) });
   }
 
-  return {
-    journal: String(journal),
-    mois,
-    annee,
-    ReferenceGed: String(referenceGedId),
-    lignesEcriture: lignes
-  };
+  return { journal: String(journal), mois, annee, ReferenceGed: String(referenceGedId), lignesEcriture: lignes };
 }
 
 /** ===== Admin endpoints ===== */
