@@ -56,11 +56,6 @@
 
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
-
-    <div id="debugCardAdmin" class="card hidden" style="margin-top:16px">
-      <h3>Debug (/?debug=1)</h3>
-      <textarea id="debugOutAdmin" readonly></textarea>
-    </div>
   </div>
 
   <!-- USER -->
@@ -74,9 +69,12 @@
         <input id="codeDossierView" readonly>
       </label>
 
-      <label>PDF à envoyer
-        <input type="file" id="pdfGed" accept="application/pdf">
+      <label>PDF à envoyer (ou photo depuis mobile)
+        <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
       </label>
+      <div class="hint">
+        Sur mobile : photo → rotation auto + recadrage auto → conversion en PDF → envoi GED.
+      </div>
 
       <button id="uploadGed">Envoyer + OCR</button>
 
@@ -130,8 +128,8 @@
           </label>
         </div>
         <div>
-          <label>Numéro ticket
-            <input id="numeroTicket" placeholder="ex: 000123">
+          <label>Numéro ticket (si vide → auto T0001, T0002…)
+            <input id="numeroTicket" placeholder="ex: T0001">
           </label>
         </div>
       </div>
@@ -170,7 +168,7 @@
 </div>
 
 <script>
-  const el = id => document.getElementById(id);
+  const el = (id) => document.getElementById(id);
   const qs = new URLSearchParams(location.search);
   const isAdmin = qs.get("admin") === "1";
   const isDebug = qs.get("debug") === "1";
@@ -199,16 +197,13 @@
   }
 
   function fillCategories(){
-    el("categorie").innerHTML = CATEGORIES
-      .map(c => `<option value="${c.key}">${c.label}</option>`)
-      .join("");
+    el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
   }
 
   function fillVatForCurrentCategory(){
     const cat = CATEGORIES.find(c => c.key === el("categorie").value);
     const allowed = cat ? cat.vat : ["20","10","0"];
     const current = el("tvaRate").value;
-
     el("tvaRate").innerHTML = allowed.map(v => `<option value="${v}">${v}%</option>`).join("");
     if (allowed.includes(current)) el("tvaRate").value = current;
   }
@@ -225,15 +220,224 @@
     }
   }
 
-  if (isAdmin){
+  /** ===== Ticket auto: T0001, T0002... ===== */
+  function nextTicketNumber() {
+    const key = "ticket_counter_T";
+    const prev = Number(localStorage.getItem(key) || "0");
+    const next = prev + 1;
+    localStorage.setItem(key, String(next));
+    return "T" + String(next).padStart(4, "0");
+  }
+
+  function ensureTicketNumber() {
+    const v = String(el("numeroTicket").value || "").trim();
+    if (v) return v;
+    const t = nextTicketNumber();
+    el("numeroTicket").value = t;
+    return t;
+  }
+
+  /** ===== Image rotation auto (EXIF) + recadrage auto ===== */
+
+  async function loadImageBitmapWithOrientation(file) {
+    // createImageBitmap({imageOrientation:"from-image"}) => rotation auto si supporté
+    if (window.createImageBitmap) {
+      try {
+        return await createImageBitmap(file, { imageOrientation: "from-image" });
+      } catch {
+        // fallback sans option
+        return await createImageBitmap(file);
+      }
+    }
+    // fallback <img>
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+    URL.revokeObjectURL(url);
+
+    // on renvoie un "pseudo bitmap"
+    return img;
+  }
+
+  function drawBitmapToCanvas(bitmap) {
+    const w = bitmap.width;
+    const h = bitmap.height;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0);
+    return canvas;
+  }
+
+  function autoCropCanvas(canvas, margin = 20, whiteThreshold = 245) {
+    const ctx = canvas.getContext("2d");
+    const { width: W, height: H } = canvas;
+    const img = ctx.getImageData(0, 0, W, H);
+    const data = img.data;
+
+    const isNotWhite = (r,g,b) => (r < whiteThreshold || g < whiteThreshold || b < whiteThreshold);
+
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+
+    // scan (pas ultra rapide, mais OK pour 1 image)
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const r = data[i], g = data[i+1], b = data[i+2];
+        if (isNotWhite(r,g,b)) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    // si rien trouvé, on garde tel quel
+    if (maxX < 0 || maxY < 0) return canvas;
+
+    // marge
+    minX = Math.max(0, minX - margin);
+    minY = Math.max(0, minY - margin);
+    maxX = Math.min(W - 1, maxX + margin);
+    maxY = Math.min(H - 1, maxY + margin);
+
+    const cropW = maxX - minX + 1;
+    const cropH = maxY - minY + 1;
+
+    // si crop trop petit, on garde original
+    if (cropW < W * 0.25 || cropH < H * 0.25) return canvas;
+
+    const out = document.createElement("canvas");
+    out.width = cropW;
+    out.height = cropH;
+    out.getContext("2d").drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+    return out;
+  }
+
+  async function imageFileToCroppedCanvas(imageFile) {
+    const bitmap = await loadImageBitmapWithOrientation(imageFile);
+    let canvas = drawBitmapToCanvas(bitmap);
+
+    // redimensionnement max (perf)
+    const maxW = 1800;
+    if (canvas.width > maxW) {
+      const ratio = maxW / canvas.width;
+      const nw = Math.round(canvas.width * ratio);
+      const nh = Math.round(canvas.height * ratio);
+      const resized = document.createElement("canvas");
+      resized.width = nw;
+      resized.height = nh;
+      resized.getContext("2d").drawImage(canvas, 0, 0, nw, nh);
+      canvas = resized;
+    }
+
+    // recadrage auto
+    canvas = autoCropCanvas(canvas, 24, 245);
+    return canvas;
+  }
+
+  function canvasToJpegBytes(canvas, quality = 0.85) {
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    const base64 = dataUrl.split(",")[1];
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, w: canvas.width, h: canvas.height };
+  }
+
+  function strToBytes(s) {
+    return new TextEncoder().encode(s);
+  }
+
+  /** PDF minimal 1 page avec image JPEG */
+  function jpegToPdfBlob(jpegBytes, imgW, imgH) {
+    const pageW = 595, pageH = 842; // A4 points
+    const margin = 24;
+    const boxW = pageW - 2*margin;
+    const boxH = pageH - 2*margin;
+
+    const imgRatio = imgW / imgH;
+    let drawW = boxW;
+    let drawH = Math.round(drawW / imgRatio);
+    if (drawH > boxH) {
+      drawH = boxH;
+      drawW = Math.round(drawH * imgRatio);
+    }
+    const x = Math.round((pageW - drawW) / 2);
+    const y = Math.round((pageH - drawH) / 2);
+
+    const chunks = [];
+    const objOffsets = [0];
+    let cursor = 0;
+
+    function addChunk(s) {
+      const b = strToBytes(s);
+      chunks.push(b);
+      cursor += b.length;
+    }
+    function addBin(u8) {
+      chunks.push(u8);
+      cursor += u8.length;
+    }
+    function markObj() { objOffsets.push(cursor); }
+
+    addChunk("%PDF-1.4\n%âãÏÓ\n");
+
+    markObj();
+    addChunk("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+    markObj();
+    addChunk("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+    markObj();
+    addChunk(
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
+      `/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
+    );
+
+    markObj();
+    addChunk(
+      `4 0 obj\n<< /Type /XObject /Subtype /Image /Name /Im0 /Width ${imgW} /Height ${imgH} ` +
+      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`
+    );
+    addBin(jpegBytes);
+    addChunk("\nendstream\nendobj\n");
+
+    const content = `q\n${drawW} 0 0 ${drawH} ${x} ${y} cm\n/Im0 Do\nQ\n`;
+    const contentBytes = strToBytes(content);
+
+    markObj();
+    addChunk(`5 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n`);
+    addBin(contentBytes);
+    addChunk("\nendstream\nendobj\n");
+
+    const xrefPos = cursor;
+    addChunk("xref\n0 6\n0000000000 65535 f \n");
+    for (let i = 1; i <= 5; i++) {
+      addChunk(String(objOffsets[i]).padStart(10, "0") + " 00000 n \n");
+    }
+    addChunk(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+
+    return new Blob(chunks, { type: "application/pdf" });
+  }
+
+  async function imageFileToPdfBlob(imageFile) {
+    const canvas = await imageFileToCroppedCanvas(imageFile);
+    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.85);
+    return jpegToPdfBlob(bytes, w, h);
+  }
+
+  /** ===== UI logic ===== */
+  if (isAdmin) {
     el("pageTitle").textContent = "Admin";
     el("adminBlock").classList.remove("hidden");
-    if (isDebug) el("debugCardAdmin").classList.remove("hidden");
 
     el("saveAdmin").addEventListener("click", async () => {
       el("adminErr").textContent = "";
       el("adminOk").textContent = "";
-      if (isDebug) el("debugOutAdmin").value = "";
 
       const payload = {
         baseUrl: el("baseUrl").value.trim(),
@@ -242,17 +446,16 @@
         codeDossier: el("codeDossier").value.trim()
       };
 
-      try{
+      try {
         const resp = await fetch("/api/admin/config", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur");
         el("adminOk").textContent = "OK — enregistré.";
-        if (isDebug) el("debugOutAdmin").value = JSON.stringify(out, null, 2);
-      }catch(e){
+      } catch (e) {
         el("adminErr").textContent = String(e.message || e);
       }
     });
@@ -260,25 +463,20 @@
     el("openDossier").addEventListener("click", async () => {
       el("adminErr").textContent = "";
       el("adminOk").textContent = "";
-      if (isDebug) el("debugOutAdmin").value = "";
 
       const codeDossier = el("codeDossier").value.trim();
-      if (!codeDossier){
-        el("adminErr").textContent = "Code dossier obligatoire (ex: DA_CONSEIL).";
-        return;
-      }
+      if (!codeDossier) { el("adminErr").textContent = "Code dossier obligatoire."; return; }
 
-      try{
+      try {
         const resp = await fetch("/api/cnx/session-dossier", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ codeDossier })
         });
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur");
         el("adminOk").textContent = "OK — dossier ouvert.";
-        if (isDebug) el("debugOutAdmin").value = JSON.stringify(out, null, 2);
-      }catch(e){
+      } catch (e) {
         el("adminErr").textContent = String(e.message || e);
       }
     });
@@ -293,31 +491,45 @@
 
     (async () => {
       const cd = await loadCodeDossier();
-      if (!cd){
-        el("gedErr").textContent = "Code dossier non configuré. Va sur /?admin=1 et renseigne-le.";
-      }
+      if (!cd) el("gedErr").textContent = "Code dossier non configuré. Va sur /?admin=1.";
     })();
 
     el("uploadGed").addEventListener("click", async () => {
       el("gedErr").textContent = "";
       el("gedOk").textContent = "";
-      el("ok").textContent = "";
       el("err").textContent = "";
+      el("ok").textContent = "";
       if (isDebug) el("debugOut").value = "";
 
       const codeDossier = (el("codeDossierView").value || "").trim();
-      if (!codeDossier){
-        el("gedErr").textContent = "Upload bloqué : code dossier manquant. Va sur /?admin=1 et renseigne-le.";
+      if (!codeDossier) {
+        el("gedErr").textContent = "Upload bloqué : code dossier manquant. Va sur /?admin=1.";
         return;
       }
 
-      const file = el("pdfGed").files[0];
-      if (!file) { el("gedErr").textContent = "Choisis un PDF."; return; }
+      const file = el("fileInput").files[0];
+      if (!file) { el("gedErr").textContent = "Choisis un PDF ou prends une photo."; return; }
 
-      const form = new FormData();
-      form.append("pdf", file, file.name || "ticket.pdf");
+      let pdfBlob = null;
+      let filename = "ticket.pdf";
 
       try {
+        const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
+        const isImg = (file.type || "").startsWith("image/");
+
+        if (isPdf) {
+          pdfBlob = file;
+          filename = file.name || "ticket.pdf";
+        } else if (isImg) {
+          pdfBlob = await imageFileToPdfBlob(file);
+          filename = "photo_ticket.pdf";
+        } else {
+          throw new Error("Format non supporté. Utilise PDF ou image.");
+        }
+
+        const form = new FormData();
+        form.append("pdf", pdfBlob, filename);
+
         const resp = await fetch("/api/ged/upload", { method: "POST", body: form });
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur upload/OCR");
@@ -327,19 +539,22 @@
 
         const ex = out.extraction || {};
         if (ex.date_document) el("dateTicket").value = ex.date_document;
-        if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
         if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
+
+        // numero ticket OCR sinon auto
+        if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
+        else ensureTicketNumber();
 
         if (typeof ex.montant_ttc === "number") el("ttc").value = String(ex.montant_ttc).replace(".", ",");
         if (typeof ex.montant_ht === "number") el("ht").value = String(ex.montant_ht).replace(".", ",");
         if (typeof ex.montant_tva === "number") el("tvaMontant").value = String(ex.montant_tva).replace(".", ",");
 
+        // Suggestion auto
         const sug = out.suggestion || {};
         if (sug.categorie_ui) setSelect(el("categorie"), sug.categorie_ui);
-
         fillVatForCurrentCategory();
-        setSelect(el("tvaRate"), sug.tva_rate);
-        setSelect(el("compteFournisseur"), sug.compteF);
+        if (sug.tva_rate) setSelect(el("tvaRate"), sug.tva_rate);
+        if (sug.compteF) setSelect(el("compteFournisseur"), sug.compteF);
 
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
 
@@ -353,21 +568,20 @@
       el("ok").textContent = "";
       if (isDebug) el("debugOut").value = "";
 
-      const referenceGedId = el("referenceGedId").value.trim();
-      if (!referenceGedId) {
-        el("err").textContent = "Uploade d'abord le PDF (Id GED requis).";
-        return;
-      }
+      const referenceGedId = (el("referenceGedId").value || "").trim();
+      if (!referenceGedId) { el("err").textContent = "Uploade d'abord le PDF (Id GED requis)."; return; }
+
+      const numeroTicket = ensureTicketNumber();
 
       const meta = {
-        journal: el("journal").value.trim(),
+        journal: (el("journal").value || "").trim(),
         compteFournisseur: el("compteFournisseur").value,
         referenceGedId,
         categorie_ui: el("categorie").value,
         tva_rate: el("tvaRate").value,
-        date_ticket: el("dateTicket").value.trim(),
-        numero_ticket: el("numeroTicket").value.trim(),
-        raison_sociale: el("raisonSociale").value.trim(),
+        date_ticket: (el("dateTicket").value || "").trim(),
+        numero_ticket: numeroTicket,
+        raison_sociale: (el("raisonSociale").value || "").trim(),
         montant_ttc: toNumOrNull(el("ttc").value),
         ht: toNumOrNull(el("ht").value),
         tva_montant: toNumOrNull(el("tvaMontant").value)
@@ -377,13 +591,12 @@
       form.append("meta", JSON.stringify(meta));
 
       try {
-        const resp = await fetch("/api/receipts/submit", { method:"POST", body: form });
+        const resp = await fetch("/api/receipts/submit", { method: "POST", body: form });
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
 
-        el("ok").textContent = "OK — écriture envoyée au logiciel comptable.";
+        el("ok").textContent = "OK — écriture envoyée.";
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
-
       } catch (e) {
         el("err").textContent = String(e.message || e);
       }
