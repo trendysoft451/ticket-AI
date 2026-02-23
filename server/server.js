@@ -32,7 +32,7 @@ let runtimeConfig = {
   baseUrl: process.env.CNX_BASE_URL || "",         // ex: https://isuiteacd.suiteexpert.fr/cnx/api
   identifiant: process.env.CNX_IDENTIFIANT || "",
   motdepasse: process.env.CNX_MOTDEPASSE || "",
-  codeDossier: process.env.CNX_CODE_DOSSIER || ""  // ex: DA_CONSEIL (requis avant GED)
+  codeDossier: process.env.CNX_CODE_DOSSIER || ""  // ex: DA_CONSEIL (requis)
 };
 
 function required(v, label) {
@@ -166,11 +166,7 @@ Renvoie STRICTEMENT un JSON valide :
   "montant_tva": 23.45,
   "raison_sociale": "Nom visible sur le ticket",
   "mots_cles": ["repas","restaurant","parking","peage","gasoil","super","sp","stationnement"]
-}
-Règles:
-- nombres en décimal (point).
-- si absent -> null.
-- mots_cles: 0 à 10 mots utiles réellement visibles sur le ticket.`.trim();
+}`.trim();
 
   const body = {
     model: OPENAI_MODEL,
@@ -305,7 +301,7 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   return String(id);
 }
 
-/** POST vers le logiciel comptable */
+/** ✅ FIX 404: endpoint V1 */
 async function cnxPostEcriture(ecrituresPayload) {
   const { baseUrl, codeDossier } = getConfig();
   const uuid = await cnxAuthenticate();
@@ -313,7 +309,8 @@ async function cnxPostEcriture(ecrituresPayload) {
   required(codeDossier, "codeDossier (admin)");
   await cnxOpenDossierSession(codeDossier);
 
-  const url = `${baseUrl.replace(/\/$/, "")}/compta/ecriture`;
+  const url = `${baseUrl.replace(/\/$/, "")}/v1/compta/ecriture`;
+
   const resp = await fetch(url, {
     method: "POST",
     headers: {
@@ -532,7 +529,6 @@ app.post("/api/receipts/submit", upload.none(), async (req, res) => {
     });
 
     const result = await cnxPostEcriture(payload);
-
     res.json({ ok: true, message: "Écriture envoyée", result });
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });
