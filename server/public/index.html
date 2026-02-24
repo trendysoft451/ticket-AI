@@ -1,287 +1,131 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tikeo - Gestion des frais</title>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tikeo Scan</title>
   <style>
-    body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:#f5f6f8;color:#222}
-    .container{max-width:800px;margin:20px auto;padding:15px}
-    .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,.08)}
-    h3{margin-top:0;color:#007bff;border-bottom:1px solid #eee;padding-bottom:10px}
-    label{display:block;margin-bottom:12px;font-size:14px;font-weight:600}
-    input,select{width:100%;padding:10px;margin-top:5px;border-radius:6px;border:1px solid #ccc;box-sizing:border-box}
-    .row{display:flex;gap:15px;margin-bottom:15px}
-    .row>div{flex:1}
-    button{padding:12px 18px;background:#007bff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;transition:0.2s}
-    button:hover{background:#0056b3}
-    button:disabled{background:#ccc;cursor:not-allowed}
+    body{margin:0;font-family:sans-serif;background:#f4f7f9;color:#333}
+    .container{max-width:600px;margin:20px auto;padding:15px}
+    .card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,0.1);margin-bottom:20px}
+    .btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    button{padding:12px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;background:#007bff;color:#fff}
     button.secondary{background:#6c757d}
     button.ok{background:#28a745}
-    .error{color:#c00;padding:10px;font-size:13px;background:#fff1f1;border-radius:6px;margin:10px 0}
-    .success{color:#0a7a2a;padding:10px;font-size:13px;background:#f1fff4;border-radius:6px;margin:10px 0}
     .hidden{display:none}
-    .previewBox{position:relative;background:#000;border-radius:8px;overflow:hidden;margin-top:10px}
-    video, canvas { width: 100%; display: block; }
-    #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
-    #statusPill{position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.6);color:#fff;padding:4px 10px;border-radius:20px;font-size:12px}
-    .source-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+    video, canvas { width: 100%; border-radius: 8px; background:#000 }
+    input, select { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:6px; box-sizing:border-box}
+    .status{padding:10px; border-radius:6px; margin:10px 0; font-size:14px}
+    .success{background:#e8f5e9; color:#2e7d32}
   </style>
 </head>
 <body>
 <div class="container">
-  <center><img src="http://www.image-heberg.fr/files/17719392581052590924.png" alt="logo" style="max-width:120px;margin-bottom:10px"/></center>
-  
-  <div id="adminBlock" class="card hidden">
-    <h3>⚙️ Configuration Admin</h3>
-    <label>URL API <input id="baseUrl" placeholder="https://..."></label>
-    <div class="row">
-      <div><label>Identifiant <input id="identifiant"></label></div>
-      <div><label>Mot de passe <input id="motdepasse" type="password"></label></div>
+  <div class="card">
+    <h3>1️⃣ Source du document</h3>
+    <div class="btn-grid">
+      <button id="btnCam">📸 Caméra</button>
+      <button id="btnFile" class="secondary">📁 PDF</button>
     </div>
-    <label>Code dossier <input id="codeDossier" placeholder="DA_CONSEIL"></label>
-    <div style="display:flex;gap:10px">
-        <button id="saveAdmin">Enregistrer</button>
-        <button id="openDossier" class="ok">Ouvrir Session</button>
+    <input type="file" id="fileInput" accept="application/pdf" class="hidden">
+    
+    <div id="camPanel" class="hidden" style="position:relative; margin-top:15px">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay" style="position:absolute; top:0; left:0"></canvas>
+      <div id="camMsg" style="text-align:center; color:#007bff; font-weight:bold">Initialisation...</div>
     </div>
-    <div id="adminErr" class="error hidden"></div>
-    <div id="adminOk" class="success hidden"></div>
+
+    <div id="previewPanel" class="hidden">
+      <p><b>Aperçu du document :</b></p>
+      <canvas id="outCanvas"></canvas>
+      <button id="btnUpload" class="ok" style="width:100%; margin-top:10px">🚀 Analyser le document</button>
+    </div>
+    <div id="ocrStatus" class="status hidden"></div>
   </div>
 
-  <div id="userBlock">
-    <div class="card">
-      <h3>1️⃣ Choix du document</h3>
-      <label>Dossier en cours : <input id="codeDossierView" readonly style="background:#f9f9f9;border:none;color:#555"></label>
-      
-      <div class="source-grid">
-        <button id="btnShowCam">📸 Prendre en photo</button>
-        <button id="btnShowFile" class="secondary">📁 Importer un PDF</button>
-      </div>
-      <input type="file" id="fileInput" accept="application/pdf" class="hidden">
-
-      <div id="camPanel" class="hidden">
-        <div class="previewBox">
-          <video id="cam" playsinline muted></video>
-          <canvas id="overlay"></canvas>
-          <div id="statusPill">Prêt</div>
-        </div>
-        <button id="stopCam" class="secondary" style="width:100%;margin-top:10px">Fermer la caméra</button>
-      </div>
-
-      <div id="resultPanel" class="hidden" style="margin-top:20px">
-        <div style="text-align:center;background:#eee;padding:10px;border-radius:8px">
-            <span id="docTypeLabel" style="font-weight:bold">Document prêt</span>
-            <canvas id="scanCanvas" class="hidden" style="max-height:300px;object-fit:contain;margin-top:10px"></canvas>
-        </div>
-        <button id="uploadGed" class="ok" style="width:100%;margin-top:15px;font-size:1.1em">🚀 Envoyer en GED & OCR</button>
-      </div>
-
-      <div id="gedErr" class="error hidden"></div>
-      <div id="gedOk" class="success hidden"></div>
+  <div class="card">
+    <h3>2️⃣ Détails comptables</h3>
+    <label>Dossier: <input id="viewDossier" readonly></label>
+    <div class="btn-grid">
+      <input id="dateDoc" type="date">
+      <input id="ttc" placeholder="Montant TTC">
     </div>
-
-    <div class="card">
-      <h3>2️⃣ Validation des données</h3>
-      <div class="row">
-        <div><label>Journal <input id="journal" value="AC"></label></div>
-        <div><label>Fournisseur
-          <select id="compteFournisseur">
-            <option value="FDIVERS" selected>FDIVERS</option>
-            <option value="FREPAS">FREPAS</option>
-            <option value="FCARBU">FCARBU</option>
-          </select>
-        </label></div>
-      </div>
-      <div class="row">
-        <div><label>Catégorie <select id="categorie"></select></label></div>
-        <div><label>TVA (%) <select id="tvaRate"></select></label></div>
-      </div>
-      <div class="row">
-        <div><label>Date <input id="dateTicket" type="date"></label></div>
-        <div><label>Montant TTC <input id="ttc" inputmode="decimal" placeholder="0.00"></label></div>
-      </div>
-      <label>Raison sociale <input id="raisonSociale" placeholder="Ex: Restaurant Le Paris"></label>
-      <button id="submit" class="ok" style="width:100%;margin-top:10px">✅ Publier l'écriture</button>
-      <div id="finalStatus"></div>
-    </div>
+    <input id="raison" placeholder="Raison sociale">
+    <button id="btnSubmit" class="ok" style="width:100%">✅ Valider l'écriture</button>
   </div>
 </div>
 
-<script>
-  // On charge OpenCV de manière asynchrone pour ne pas bloquer le rendu
-  var scriptOpenCV = document.createElement('script');
-  scriptOpenCV.src = "https://docs.opencv.org/4.x/opencv.js";
-  scriptOpenCV.async = true;
-  document.head.appendChild(scriptOpenCV);
-
-  var scriptJscan = document.createElement('script');
-  scriptJscan.src = "https://unpkg.com/jscanify@1.2.0/dist/jscanify.min.js";
-  scriptJscan.defer = true;
-  document.head.appendChild(scriptJscan);
-</script>
+<script src="https://docs.opencv.org/4.x/opencv.js" async></script>
+<script src="https://unpkg.com/jscanify@1.2.0/dist/jscanify.min.js" defer></script>
 
 <script>
-  const el = (id) => document.getElementById(id);
-  const qs = new URLSearchParams(location.search);
-  
-  let scanner = null;
-  let camStream = null;
-  let loopTimer = null;
-  let pendingDoc = null; // Contiendra le Blob (image rognée ou PDF original)
-  let stabilityCounter = 0;
+  const $ = id => document.getElementById(id);
+  let scanner, stream, loop, docBlob;
 
-  // INITIALISATION
-  window.onload = () => {
-    if (qs.get("admin") === "1") {
-      el("adminBlock").classList.remove("hidden");
-      initAdminLogic();
-    }
-    fillCategories();
-    loadPublicConfig();
-  };
-
-  function initAdminLogic() {
-    el("saveAdmin").onclick = async () => {
-        const data = { baseUrl: el("baseUrl").value, identifiant: el("identifiant").value, motdepasse: el("motdepasse").value, codeDossier: el("codeDossier").value };
-        await fetch("/api/admin/config", { method: "POST", headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
-        el("adminOk").classList.remove("hidden");
-    };
-    el("openDossier").onclick = async () => {
-        await fetch("/api/cnx/session-dossier", { method: "POST", headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ codeDossier: el("codeDossier").value }) });
-        el("adminOk").textContent = "Session Active !";
-        el("adminOk").classList.remove("hidden");
-    };
-  }
-
-  async function loadPublicConfig() {
-    try {
-        const r = await fetch("/api/admin/public");
-        const d = await r.json();
-        el("codeDossierView").value = d.codeDossier || "Non configuré";
-    } catch(e) {}
-  }
-
-  // --- LOGIQUE PHOTO (ROGNAGE AUTO) ---
-  el("btnShowCam").onclick = async () => {
-    if (typeof jscanify === 'undefined') return alert("Chargement des outils de scan... réessayez dans 2 sec.");
-    el("camPanel").classList.remove("hidden");
-    el("resultPanel").classList.add("hidden");
+  // --- CAMERA LOGIC ---
+  $('btnCam').onclick = async () => {
+    $('camPanel').classList.remove('hidden');
     scanner = new jscanify();
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    $('video').srcObject = stream;
+    $('video').play();
     
-    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-    const video = el("cam");
-    video.srcObject = camStream;
-    video.play();
-
-    const overlay = el("overlay");
-    const ctx = overlay.getContext("2d");
-    
-    video.onloadedmetadata = () => {
-        overlay.width = video.videoWidth;
-        overlay.height = video.videoHeight;
-        loopTimer = setInterval(() => {
-            ctx.drawImage(video, 0, 0);
-            const mat = cv.imread(video);
-            const contour = scanner.findPaperContour(mat);
-            if (contour) {
-                scanner.highlightPaper(overlay, { thickness: 5, color: '#00ff00' });
-                stabilityCounter++;
-                el("statusPill").textContent = `Analyse... ${stabilityCounter}/10`;
-                if (stabilityCounter >= 10) processCapture(video, contour);
-            } else {
-                stabilityCounter = 0;
-                el("statusPill").textContent = "Alignez le ticket";
-            }
-            mat.delete();
-        }, 100);
-    };
+    const ctx = $('overlay').getContext('2d');
+    loop = setInterval(() => {
+      if (!$('video').videoWidth) return;
+      $('overlay').width = $('video').videoWidth;
+      $('overlay').height = $('video').videoHeight;
+      ctx.drawImage($('video'), 0, 0);
+      const mat = cv.imread($('video'));
+      const contour = scanner.findPaperContour(mat);
+      if (contour) {
+        scanner.highlightPaper($('overlay'), { color: '#00ff00', thickness: 5 });
+        if (++this.stab > 10) capture(contour);
+      } else { this.stab = 0; }
+      mat.delete();
+    }, 100);
   };
 
-  function processCapture(video, contour) {
-    clearInterval(loopTimer);
-    const resultCanvas = scanner.extractPaper(video, 800, 1100, contour);
-    const dst = el("scanCanvas");
-    dst.width = resultCanvas.width;
-    dst.height = resultCanvas.height;
-    dst.getContext("2d").drawImage(resultCanvas, 0, 0);
-    
-    dst.classList.remove("hidden");
-    el("docTypeLabel").textContent = "📸 Photo (Ticket isolé)";
-    
-    // Conversion en Blob pour envoi
-    resultCanvas.toBlob((blob) => { pendingDoc = blob; }, 'image/jpeg', 0.9);
-    
-    el("resultPanel").classList.remove("hidden");
-    closeCam();
+  function capture(contour) {
+    clearInterval(loop);
+    const canvas = scanner.extractPaper($('video'), 800, 1100, contour);
+    $('outCanvas').width = 800; $('outCanvas').height = 1100;
+    $('outCanvas').getContext('2d').drawImage(canvas, 0, 0);
+    canvas.toBlob(b => docBlob = b, 'image/jpeg', 0.9);
+    $('previewPanel').classList.remove('hidden');
+    stream.getTracks().forEach(t => t.stop());
+    $('camPanel').classList.add('hidden');
   }
 
-  function closeCam() {
-    if (loopTimer) clearInterval(loopTimer);
-    if (camStream) camStream.getTracks().forEach(t => t.stop());
-    el("camPanel").classList.add("hidden");
-  }
-  el("stopCam").onclick = closeCam;
-
-  // --- LOGIQUE IMPORT PDF ---
-  el("btnShowFile").onclick = () => el("fileInput").click();
-  el("fileInput").onchange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        pendingDoc = file;
-        el("docTypeLabel").textContent = "📁 PDF : " + file.name;
-        el("scanCanvas").classList.add("hidden");
-        el("resultPanel").classList.remove("hidden");
-    }
+  // --- FILE LOGIC ---
+  $('btnFile').onclick = () => $('fileInput').click();
+  $('fileInput').onchange = e => {
+    docBlob = e.target.files[0];
+    $('previewPanel').classList.remove('hidden');
+    $('outCanvas').classList.add('hidden');
   };
 
-  // --- ENVOI GED + OCR ---
-  el("uploadGed").onclick = async () => {
-    if (!pendingDoc) return;
-    el("gedOk").textContent = "⏳ Transfert et analyse OCR...";
-    el("gedOk").classList.remove("hidden");
-    el("gedErr").classList.add("hidden");
-
+  // --- UPLOAD & OCR ---
+  $('btnUpload').onclick = async () => {
     const fd = new FormData();
-    fd.append("pdf", pendingDoc, pendingDoc.name || "ticket.jpg");
-
-    try {
-        const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
-        const res = await r.json();
-        if(!r.ok) throw res;
-
-        el("gedOk").textContent = "✅ Document analysé !";
-        // Remplissage automatique
-        const ex = res.extraction || {};
-        if (ex.date_document) el("dateTicket").value = ex.date_document;
-        if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
-        if (ex.montant_ttc) el("ttc").value = ex.montant_ttc;
-        
-        window.gedId = res.gedId; // Stockage temporaire
-    } catch (e) {
-        el("gedErr").textContent = "Erreur : " + (e.error || "Problème réseau");
-        el("gedErr").classList.remove("hidden");
-    }
+    fd.append('pdf', docBlob, docBlob.name || "scan.jpg");
+    $('ocrStatus').className = "status"; $('ocrStatus').textContent = "Analyse...";
+    $('ocrStatus').classList.remove('hidden');
+    
+    const r = await fetch('/api/ged/upload', { method: 'POST', body: fd });
+    const res = await r.json();
+    
+    $('ocrStatus').classList.add('success');
+    $('ocrStatus').textContent = "Analyse terminée !";
+    $('dateDoc').value = res.extraction.date_document;
+    $('ttc').value = res.extraction.montant_ttc;
+    $('raison').value = res.extraction.raison_sociale;
+    window.gedId = res.gedId;
   };
 
-  // --- COMPOSTAGE ---
-  function fillCategories() {
-    el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
-    el("categorie").onchange = () => {
-        const cat = CATEGORIES.find(c => c.key === el("categorie").value);
-        el("tvaRate").innerHTML = cat.vat.map(v => `<option value="${v}">${v}%</option>`).join("");
-    };
-    el("categorie").dispatchEvent(new Event('change'));
-  }
-
-  const CATEGORIES = [
-    { key: "repas", label: "Repas", vat: ["10", "20", "0"] },
-    { key: "carbu", label: "Carburant", vat: ["20"] },
-    { key: "divers", label: "Divers", vat: ["20", "10", "5.5"] }
-  ];
-
-  el("submit").onclick = () => {
-      if(!window.gedId) return alert("Veuillez d'abord envoyer le doc en GED.");
-      el("ok").textContent = "Écriture comptabilisée avec succès !";
+  window.onload = async () => {
+    const r = await fetch('/api/admin/public');
+    const d = await r.json();
+    $('viewDossier').value = d.codeDossier || "Non configuré";
   };
 </script>
 </body>
