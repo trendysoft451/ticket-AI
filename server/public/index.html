@@ -6,7 +6,7 @@
   <title>Frais — GED + OCR</title>
   <style>
     body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#222}
-    .container{max-width:980px;margin:40px auto;padding:20px}
+    .container{max-width:900px;margin:40px auto;padding:20px}
     .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
     label{display:block;margin-bottom:12px;font-size:14px}
     input,select,textarea{width:100%;padding:8px;margin-top:4px;border-radius:4px;border:1px solid #ccc;font-size:14px}
@@ -15,19 +15,10 @@
     .row>div{flex:1}
     button{padding:10px 16px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold}
     button:hover{background:#0056b3}
-    button.secondary{background:#6c757d}
-    button.secondary:hover{background:#545b62}
-    button.ok{background:#28a745}
-    button.ok:hover{background:#1e7e34}
     .error{color:#c00;margin-top:10px;font-size:13px;white-space:pre-wrap}
     .success{color:#0a7a2a;margin-top:10px;font-size:13px;white-space:pre-wrap}
     .hidden{display:none}
     .hint{font-size:12px;color:#666;margin-top:-8px;margin-bottom:10px}
-    .previewWrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
-    .previewBox{border:1px solid #ddd;border-radius:8px;padding:10px;background:#fafafa}
-    canvas{max-width:420px;width:100%;height:auto;border-radius:6px;background:#fff}
-    .small{font-size:12px;color:#555}
-    .btnRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   </style>
 </head>
 <body>
@@ -60,10 +51,8 @@
     </label>
     <div class="hint">Requis : l’upload GED est bloqué si vide.</div>
 
-    <div class="btnRow">
-      <button id="saveAdmin">Enregistrer</button>
-      <button id="openDossier" class="ok">Ouvrir dossier</button>
-    </div>
+    <button id="saveAdmin">Enregistrer</button>
+    <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
 
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
@@ -71,10 +60,10 @@
 
   <!-- USER -->
   <div id="userBlock" class="hidden">
-    <p>1) Prendre une photo / choisir un PDF → Aperçu scan → Valider → Upload GED + OCR → 2) Envoyer l’écriture</p>
+    <p>1) Upload PDF en GED + OCR → 2) Ajuste puis envoie l’écriture</p>
 
     <div class="card">
-      <h3>1️⃣ Scan + Upload GED + OCR</h3>
+      <h3>1️⃣ Upload PDF en GED + OCR</h3>
 
       <label>Code dossier (admin)
         <input id="codeDossierView" readonly>
@@ -83,34 +72,11 @@
       <label>PDF à envoyer (ou photo depuis mobile)
         <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
       </label>
-      <div class="hint">Photo : rotation EXIF + détection bord à bord + redressement perspective + PDF.</div>
-
-      <div id="scanPanel" class="previewWrap hidden">
-        <div class="previewBox">
-          <div class="small"><b>Aperçu “ticket scanné”</b></div>
-          <canvas id="scanCanvas"></canvas>
-          <div class="small" id="scanMeta"></div>
-        </div>
-
-        <div class="previewBox" style="min-width:260px">
-          <div class="small"><b>Actions</b></div>
-          <div class="btnRow" style="margin-top:10px">
-            <button id="rescanBtn" class="secondary">Re-scanner (plus agressif)</button>
-            <button id="acceptScanBtn" class="ok">Valider l’aperçu</button>
-            <button id="clearScanBtn" class="secondary">Annuler</button>
-          </div>
-          <div class="hint" style="margin-top:10px">
-            Si le scan rate : recule un peu, évite le flou, garde les 4 coins visibles.
-          </div>
-          <div id="scanErr" class="error"></div>
-          <div id="scanOk" class="success"></div>
-        </div>
+      <div class="hint">
+        Photo : rotation EXIF + détection bord à bord + redressement perspective + conversion PDF.
       </div>
 
-      <div class="btnRow">
-        <button id="uploadGed" class="ok">Envoyer GED + OCR</button>
-      </div>
-      <div class="hint">Si tu as choisi une photo, tu dois d’abord “Valider l’aperçu”.</div>
+      <button id="uploadGed">Envoyer + OCR</button>
 
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
@@ -189,7 +155,7 @@
         <input id="tvaMontant" inputmode="decimal" placeholder="2,32">
       </label>
 
-      <button id="submit" class="ok">Envoyer l’écriture</button>
+      <button id="submit">Envoyer l’écriture</button>
       <div id="err" class="error"></div>
       <div id="ok" class="success"></div>
     </div>
@@ -274,7 +240,7 @@
   }
 
   /** ===== OpenCV ready ===== */
-  function waitForOpenCV(timeoutMs = 15000) {
+  function waitForOpenCV(timeoutMs = 12000) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
       (function poll(){
@@ -299,7 +265,7 @@
     return img;
   }
 
-  function drawBitmapToCanvas(bitmap, maxW = 2600) {
+  function drawBitmapToCanvas(bitmap, maxW = 2200) {
     let w = bitmap.width, h = bitmap.height;
     if (w > maxW) { const r = maxW / w; w = Math.round(w*r); h = Math.round(h*r); }
     const canvas = document.createElement("canvas");
@@ -320,137 +286,140 @@
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 
   /**
-   * ✅ scanTicketOpenCV corrigé (pas de double delete)
+   * Amélioration ombres/contraste + détection quadrilatère + warp perspective
+   * Retourne canvas "ticket bord à bord" ou fallback canvas original si non détecté.
    */
-  function scanTicketOpenCV(srcCanvas, mode = "normal") {
+  function scanTicketOpenCV(srcCanvas) {
     const src = cv.imread(srcCanvas);
+
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-    // CLAHE
+    // --- 1) CLAHE pour corriger ombres / contraste local ---
     let claheOut = new cv.Mat();
     try {
-      const clahe = new cv.CLAHE(2.4, new cv.Size(8, 8));
+      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
       clahe.apply(gray, claheOut);
       clahe.delete();
     } catch {
-      claheOut.delete();
-      claheOut = gray.clone();
+      claheOut = gray.clone(); // fallback
     }
 
-    // blur
+    // --- 2) léger blur ---
     const blur = new cv.Mat();
-    cv.GaussianBlur(claheOut, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
 
-    // adaptive threshold
+    // --- 3) adaptive threshold (meilleur sur table claire + ombres) ---
     const thr = new cv.Mat();
-    const block = (mode === "aggressive") ? 41 : 31;
-    const C = (mode === "aggressive") ? 6 : 8;
     cv.adaptiveThreshold(
       blur, thr, 255,
       cv.ADAPTIVE_THRESH_GAUSSIAN_C,
       cv.THRESH_BINARY,
-      block,
-      C
+      31, // block size
+      8   // C
     );
 
-    // invert + close
+    // --- 4) inversion pour contours (optionnel mais souvent mieux) ---
     const inv = new cv.Mat();
     cv.bitwise_not(thr, inv);
 
-    const kernelSize = (mode === "aggressive") ? 5 : 3;
-    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kernelSize, kernelSize));
+    // --- 5) morpho pour fermer les ruptures ---
+    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
     const morphed = new cv.Mat();
     cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel);
 
-    // edges
+    // --- 6) edges + contours ---
     const edges = new cv.Mat();
-    const c1 = (mode === "aggressive") ? 40 : 60;
-    const c2 = (mode === "aggressive") ? 140 : 180;
-    cv.Canny(morphed, edges, c1, c2);
+    cv.Canny(morphed, edges, 60, 180);
 
     const contours = new cv.MatVector();
     const hierarchy = new cv.Mat();
     cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    let best = null; // cv.Mat
+    let best = null;
     let bestArea = 0;
 
     for (let i = 0; i < contours.size(); i++) {
       const cnt = contours.get(i);
-
       const peri = cv.arcLength(cnt, true);
       const approx = new cv.Mat();
-      const eps = (mode === "aggressive") ? 0.03 : 0.02;
-      cv.approxPolyDP(cnt, approx, eps * peri, true);
+      cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
 
       if (approx.rows === 4) {
         const area = cv.contourArea(approx);
-        if (area > bestArea) {
-          if (best) best.delete();   // libère ancien best
-          best = approx;             // conserve approx (ne pas delete)
-          bestArea = area;
-        } else {
-          approx.delete();
-        }
-      } else {
-        approx.delete();
+        if (area > bestArea) { bestArea = area; best = approx; }
       }
 
+      approx.delete();
       cnt.delete();
     }
 
-    const minAreaRatio = (mode === "aggressive") ? 0.12 : 0.18;
-    const minArea = src.rows * src.cols * minAreaRatio;
-
+    const minArea = src.rows * src.cols * 0.18; // seuil assez strict pour éviter faux positifs
     if (!best || bestArea < minArea) {
-      if (best) best.delete();
+      // cleanup
       src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
       kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-      return { canvas: srcCanvas, found: false, area: bestArea, minArea };
+      if (best) best.delete();
+      return srcCanvas; // fallback
     }
 
     // 4 points
     const pts = [];
-    for (let i = 0; i < 4; i++) pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
+    for (let i = 0; i < 4; i++) {
+      pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
+    }
     const [tl, tr, br, bl] = orderCorners(pts);
 
-    let dstW = Math.max(1, Math.round(Math.max(dist(br, bl), dist(tr, tl))));
-    let dstH = Math.max(1, Math.round(Math.max(dist(tr, br), dist(tl, bl))));
+    // dimensions cible
+    const widthA = dist(br, bl);
+    const widthB = dist(tr, tl);
+    const maxWidth = Math.max(widthA, widthB);
 
-    const maxOutW = 2400;
+    const heightA = dist(tr, br);
+    const heightB = dist(tl, bl);
+    const maxHeight = Math.max(heightA, heightB);
+
+    let dstW = Math.max(1, Math.round(maxWidth));
+    let dstH = Math.max(1, Math.round(maxHeight));
+
+    // Limite sortie (perf)
+    const maxOutW = 2200;
     if (dstW > maxOutW) {
       const r = maxOutW / dstW;
       dstW = Math.round(dstW * r);
       dstH = Math.round(dstH * r);
     }
 
-    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [ tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y ]);
-    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [ 0, 0, dstW-1, 0, dstW-1, dstH-1, 0, dstH-1 ]);
+    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
+    ]);
+    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0, dstW-1, 0, dstW-1, dstH-1, 0, dstH-1
+    ]);
 
     const M = cv.getPerspectiveTransform(srcTri, dstTri);
     const warped = new cv.Mat();
     cv.warpPerspective(src, warped, M, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
 
+    // sortie canvas
     const outCanvas = document.createElement("canvas");
     outCanvas.width = dstW;
     outCanvas.height = dstH;
     cv.imshow(outCanvas, warped);
 
     // cleanup
-    best.delete();
-    srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
     src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
     kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
+    best.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
 
-    return { canvas: outCanvas, found: true, area: bestArea, minArea };
+    return outCanvas;
   }
 
-  async function imageFileToTicketCanvas(imageFile, mode = "normal") {
+  async function imageFileToTicketCanvas(imageFile) {
     await waitForOpenCV();
     const bitmap = await loadImageBitmapWithOrientation(imageFile);
     const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
-    return scanTicketOpenCV(baseCanvas, mode);
+    return scanTicketOpenCV(baseCanvas);
   }
 
   /** ===== JPEG + PDF minimal ===== */
@@ -518,36 +487,10 @@
     return new Blob(chunks, { type: "application/pdf" });
   }
 
-  function canvasToPdfBlob(canvas) {
+  async function imageFileToPdfBlob(imageFile) {
+    const canvas = await imageFileToTicketCanvas(imageFile);
     const { bytes, w, h } = canvasToJpegBytes(canvas, 0.86);
     return jpegToPdfBlob(bytes, w, h);
-  }
-
-  /** ===== State scan ===== */
-  let selectedFile = null;
-  let pendingPdfBlob = null;
-  let pendingPdfFilename = "ticket.pdf";
-  let lastScanCanvas = null;
-  let lastScanMode = "normal";
-
-  function resetScanState() {
-    pendingPdfBlob = null;
-    pendingPdfFilename = "ticket.pdf";
-    lastScanCanvas = null;
-    lastScanMode = "normal";
-    el("scanPanel").classList.add("hidden");
-    el("scanErr").textContent = "";
-    el("scanOk").textContent = "";
-    el("scanMeta").textContent = "";
-    const c = el("scanCanvas");
-    c.width = 1; c.height = 1;
-  }
-
-  function renderPreviewCanvas(srcCanvas) {
-    const dst = el("scanCanvas");
-    dst.width = srcCanvas.width;
-    dst.height = srcCanvas.height;
-    dst.getContext("2d").drawImage(srcCanvas, 0, 0);
   }
 
   /** ===== UI ===== */
@@ -614,98 +557,6 @@
       if (!cd) el("gedErr").textContent = "Code dossier non configuré. Va sur /?admin=1.";
     })();
 
-    el("fileInput").addEventListener("change", async () => {
-      resetScanState();
-      el("gedErr").textContent = "";
-      el("gedOk").textContent = "";
-      selectedFile = el("fileInput").files[0] || null;
-      if (!selectedFile) return;
-
-      const isPdf = selectedFile.type === "application/pdf" || (selectedFile.name || "").toLowerCase().endsWith(".pdf");
-      const isImg = (selectedFile.type || "").startsWith("image/");
-
-      if (isPdf) {
-        pendingPdfBlob = selectedFile;
-        pendingPdfFilename = selectedFile.name || "ticket.pdf";
-        el("scanPanel").classList.add("hidden");
-        return;
-      }
-
-      if (!isImg) {
-        el("gedErr").textContent = "Format non supporté. Utilise PDF ou image.";
-        return;
-      }
-
-      try {
-        el("scanPanel").classList.remove("hidden");
-        el("scanOk").textContent = "Scan en cours…";
-        el("scanErr").textContent = "";
-
-        lastScanMode = "normal";
-        const r = await imageFileToTicketCanvas(selectedFile, "normal");
-        lastScanCanvas = r.canvas;
-
-        renderPreviewCanvas(lastScanCanvas);
-        el("scanMeta").textContent =
-          `Détection: ${r.found ? "OK" : "NON"} — mode=${lastScanMode} — (${lastScanCanvas.width}×${lastScanCanvas.height})`;
-
-        el("scanOk").textContent = r.found
-          ? "Aperçu prêt. Clique “Valider l’aperçu” pour générer le PDF."
-          : "Bords non détectés. Essaie “Re-scanner (plus agressif)” ou reprends la photo.";
-
-      } catch (e) {
-        el("scanOk").textContent = "";
-        el("scanErr").textContent = String(e.message || e);
-      }
-    });
-
-    el("rescanBtn").addEventListener("click", async () => {
-      el("scanErr").textContent = "";
-      el("scanOk").textContent = "";
-      if (!selectedFile || !(selectedFile.type || "").startsWith("image/")) {
-        el("scanErr").textContent = "Re-scan possible uniquement sur une image.";
-        return;
-      }
-      try {
-        el("scanOk").textContent = "Re-scan en cours…";
-        lastScanMode = "aggressive";
-        const r = await imageFileToTicketCanvas(selectedFile, "aggressive");
-        lastScanCanvas = r.canvas;
-
-        renderPreviewCanvas(lastScanCanvas);
-        el("scanMeta").textContent =
-          `Détection: ${r.found ? "OK" : "NON"} — mode=${lastScanMode} — (${lastScanCanvas.width}×${lastScanCanvas.height})`;
-
-        el("scanOk").textContent = r.found
-          ? "Aperçu prêt. Clique “Valider l’aperçu” pour générer le PDF."
-          : "Toujours non détecté. Reprends la photo en incluant les 4 coins.";
-
-      } catch (e) {
-        el("scanOk").textContent = "";
-        el("scanErr").textContent = String(e.message || e);
-      }
-    });
-
-    el("acceptScanBtn").addEventListener("click", async () => {
-      el("scanErr").textContent = "";
-      el("scanOk").textContent = "";
-      if (!lastScanCanvas) { el("scanErr").textContent = "Aucun aperçu."; return; }
-
-      try {
-        pendingPdfBlob = canvasToPdfBlob(lastScanCanvas);
-        pendingPdfFilename = "photo_ticket.pdf";
-        el("scanOk").textContent = "PDF généré à partir de l’aperçu. Tu peux maintenant “Envoyer GED + OCR”.";
-      } catch (e) {
-        el("scanErr").textContent = String(e.message || e);
-      }
-    });
-
-    el("clearScanBtn").addEventListener("click", () => {
-      resetScanState();
-      el("fileInput").value = "";
-      selectedFile = null;
-    });
-
     el("uploadGed").addEventListener("click", async () => {
       el("gedErr").textContent = "";
       el("gedOk").textContent = "";
@@ -719,14 +570,28 @@
         return;
       }
 
-      if (!pendingPdfBlob) {
-        el("gedErr").textContent = "Choisis un PDF, ou prends une photo puis clique “Valider l’aperçu”.";
-        return;
-      }
+      const file = el("fileInput").files[0];
+      if (!file) { el("gedErr").textContent = "Choisis un PDF ou prends une photo."; return; }
+
+      let pdfBlob = null;
+      let filename = "ticket.pdf";
 
       try {
+        const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
+        const isImg = (file.type || "").startsWith("image/");
+
+        if (isPdf) {
+          pdfBlob = file;
+          filename = file.name || "ticket.pdf";
+        } else if (isImg) {
+          pdfBlob = await imageFileToPdfBlob(file);
+          filename = "photo_ticket.pdf";
+        } else {
+          throw new Error("Format non supporté. Utilise PDF ou image.");
+        }
+
         const form = new FormData();
-        form.append("pdf", pendingPdfBlob, pendingPdfFilename);
+        form.append("pdf", pdfBlob, filename);
 
         const resp = await fetch("/api/ged/upload", { method: "POST", body: form });
         const out = await resp.json();
