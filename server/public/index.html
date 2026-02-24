@@ -320,13 +320,7 @@
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 
   /**
-   * Scan ticket bord-à-bord:
-   * - preprocess (CLAHE + adaptive threshold + morpho)
-   * - Canny + contours
-   * - plus grand quadrilatère
-   * - warp perspective
-   *
-   * mode = "normal" | "aggressive" (plus tolérant)
+   * ✅ scanTicketOpenCV corrigé (pas de double delete)
    */
   function scanTicketOpenCV(srcCanvas, mode = "normal") {
     const src = cv.imread(srcCanvas);
@@ -336,16 +330,17 @@
     // CLAHE
     let claheOut = new cv.Mat();
     try {
-      const clahe = new cv.CLAHE(2.4, new cv.Size(8,8));
+      const clahe = new cv.CLAHE(2.4, new cv.Size(8, 8));
       clahe.apply(gray, claheOut);
       clahe.delete();
     } catch {
+      claheOut.delete();
       claheOut = gray.clone();
     }
 
     // blur
     const blur = new cv.Mat();
-    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
+    cv.GaussianBlur(claheOut, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
 
     // adaptive threshold
     const thr = new cv.Mat();
@@ -378,11 +373,12 @@
     const hierarchy = new cv.Mat();
     cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    let best = null;
+    let best = null; // cv.Mat
     let bestArea = 0;
 
     for (let i = 0; i < contours.size(); i++) {
       const cnt = contours.get(i);
+
       const peri = cv.arcLength(cnt, true);
       const approx = new cv.Mat();
       const eps = (mode === "aggressive") ? 0.03 : 0.02;
@@ -390,9 +386,17 @@
 
       if (approx.rows === 4) {
         const area = cv.contourArea(approx);
-        if (area > bestArea) { bestArea = area; best = approx; }
+        if (area > bestArea) {
+          if (best) best.delete();   // libère ancien best
+          best = approx;             // conserve approx (ne pas delete)
+          bestArea = area;
+        } else {
+          approx.delete();
+        }
+      } else {
+        approx.delete();
       }
-      approx.delete();
+
       cnt.delete();
     }
 
@@ -400,29 +404,20 @@
     const minArea = src.rows * src.cols * minAreaRatio;
 
     if (!best || bestArea < minArea) {
-      // cleanup
+      if (best) best.delete();
       src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
       kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-      if (best) best.delete();
       return { canvas: srcCanvas, found: false, area: bestArea, minArea };
     }
 
+    // 4 points
     const pts = [];
     for (let i = 0; i < 4; i++) pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
     const [tl, tr, br, bl] = orderCorners(pts);
 
-    const widthA = dist(br, bl);
-    const widthB = dist(tr, tl);
-    const maxWidth = Math.max(widthA, widthB);
+    let dstW = Math.max(1, Math.round(Math.max(dist(br, bl), dist(tr, tl))));
+    let dstH = Math.max(1, Math.round(Math.max(dist(tr, br), dist(tl, bl))));
 
-    const heightA = dist(tr, br);
-    const heightB = dist(tl, bl);
-    const maxHeight = Math.max(heightA, heightB);
-
-    let dstW = Math.max(1, Math.round(maxWidth));
-    let dstH = Math.max(1, Math.round(maxHeight));
-
-    // limite sortie
     const maxOutW = 2400;
     if (dstW > maxOutW) {
       const r = maxOutW / dstW;
@@ -443,9 +438,10 @@
     cv.imshow(outCanvas, warped);
 
     // cleanup
+    best.delete();
+    srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
     src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
     kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    best.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
 
     return { canvas: outCanvas, found: true, area: bestArea, minArea };
   }
@@ -528,18 +524,16 @@
   }
 
   /** ===== State scan ===== */
-  let selectedFile = null;          // File (image/pdf)
-  let pendingPdfBlob = null;        // Blob PDF prêt à envoyer
+  let selectedFile = null;
+  let pendingPdfBlob = null;
   let pendingPdfFilename = "ticket.pdf";
-  let lastScanCanvas = null;        // Canvas aperçu
-  let lastScanFound = false;
+  let lastScanCanvas = null;
   let lastScanMode = "normal";
 
   function resetScanState() {
     pendingPdfBlob = null;
     pendingPdfFilename = "ticket.pdf";
     lastScanCanvas = null;
-    lastScanFound = false;
     lastScanMode = "normal";
     el("scanPanel").classList.add("hidden");
     el("scanErr").textContent = "";
@@ -631,7 +625,6 @@
       const isImg = (selectedFile.type || "").startsWith("image/");
 
       if (isPdf) {
-        // PDF => prêt à envoyer, pas d’aperçu
         pendingPdfBlob = selectedFile;
         pendingPdfFilename = selectedFile.name || "ticket.pdf";
         el("scanPanel").classList.add("hidden");
@@ -643,7 +636,6 @@
         return;
       }
 
-      // Image => on scanne et on affiche l’aperçu
       try {
         el("scanPanel").classList.remove("hidden");
         el("scanOk").textContent = "Scan en cours…";
@@ -652,7 +644,6 @@
         lastScanMode = "normal";
         const r = await imageFileToTicketCanvas(selectedFile, "normal");
         lastScanCanvas = r.canvas;
-        lastScanFound = r.found;
 
         renderPreviewCanvas(lastScanCanvas);
         el("scanMeta").textContent =
@@ -680,7 +671,6 @@
         lastScanMode = "aggressive";
         const r = await imageFileToTicketCanvas(selectedFile, "aggressive");
         lastScanCanvas = r.canvas;
-        lastScanFound = r.found;
 
         renderPreviewCanvas(lastScanCanvas);
         el("scanMeta").textContent =
@@ -702,7 +692,6 @@
       if (!lastScanCanvas) { el("scanErr").textContent = "Aucun aperçu."; return; }
 
       try {
-        // même si found=false, on autorise (ça prend l’image complète)
         pendingPdfBlob = canvasToPdfBlob(lastScanCanvas);
         pendingPdfFilename = "photo_ticket.pdf";
         el("scanOk").textContent = "PDF généré à partir de l’aperçu. Tu peux maintenant “Envoyer GED + OCR”.";
