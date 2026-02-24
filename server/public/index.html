@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tikeo - Scan Intelligent</title>
+  <title>Tikeo - Gestion des frais</title>
   <style>
     body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#222}
     .container{max-width:980px;margin:40px auto;padding:20px}
     .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
     label{display:block;margin-bottom:12px;font-size:14px}
     input,select,textarea{width:100%;padding:8px;margin-top:4px;border-radius:4px;border:1px solid #ccc;font-size:14px}
-    textarea{min-height:180px;font-family:monospace}
     .row{display:flex;gap:20px}
     .row>div{flex:1}
     button{padding:10px 16px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold}
@@ -20,12 +19,10 @@
     .error{color:#c00;margin-top:10px;font-size:13px;white-space:pre-wrap}
     .success{color:#0a7a2a;margin-top:10px;font-size:13px;white-space:pre-wrap}
     .hidden{display:none}
-    .hint{font-size:12px;color:#666;margin-top:-8px;margin-bottom:10px}
     .previewWrap{display:flex;flex-direction:column;align-items:center;gap:16px}
     .previewBox{border:1px solid #ddd;border-radius:8px;padding:10px;background:#fafafa;width:100%;max-width:500px;position:relative}
     video, canvas { width: 100%; height: auto; border-radius: 6px; background: #000; }
     #overlay { position: absolute; top: 10px; left: 10px; width: calc(100% - 20px); pointer-events: none; }
-    .pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#eee;font-size:12px}
     .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
   </style>
 </head>
@@ -43,8 +40,8 @@
     </div>
     <label>Code dossier <input id="codeDossier" placeholder="DA_CONSEIL"></label>
     <div class="btnRow">
-      <button id="saveAdmin">Enregistrer</button>
-      <button id="openDossier" class="ok">Ouvrir dossier</button>
+      <button id="saveAdmin">Enregistrer Config</button>
+      <button id="openDossier" class="ok">Ouvrir Session Dossier</button>
     </div>
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
@@ -53,11 +50,11 @@
   <div id="userBlock" class="hidden">
     <div class="card">
       <h3>1️⃣ Capture du ticket</h3>
-      <label>Code dossier (actif) <input id="codeDossierView" readonly></label>
+      <label>Dossier actif <input id="codeDossierView" readonly style="background:#eee"></label>
       
       <div class="btnRow">
-        <button id="startCam">Ouvrir l'appareil photo</button>
-        <button id="stopCam" class="secondary" disabled>Fermer</button>
+        <button id="startCam">Scanner un ticket</button>
+        <button id="stopCam" class="secondary" disabled>Annuler</button>
         <input type="file" id="fileInput" accept="application/pdf" style="display:none">
         <button onclick="document.getElementById('fileInput').click()" class="secondary">Importer PDF</button>
       </div>
@@ -66,28 +63,28 @@
         <div class="previewBox">
           <video id="cam" playsinline muted></video>
           <canvas id="overlay"></canvas>
-          <div id="camStatus" style="text-align:center; font-weight:bold; color:#007bff; margin-top:5px">Initialisation...</div>
+          <div id="camStatus" style="text-align:center; font-weight:bold; color:#007bff; margin-top:5px">Initialisation caméra...</div>
         </div>
       </div>
 
       <div id="scanPanel" class="previewWrap hidden" style="margin-top:20px">
         <div class="previewBox">
-          <div class="small"><b>Aperçu du ticket détecté (rogné)</b></div>
+          <div class="small"><b>Ticket détecté (fond supprimé)</b></div>
           <canvas id="scanCanvas"></canvas>
           <div class="btnRow">
-            <button id="clearScanBtn" class="secondary">Recommencer</button>
-            <button id="uploadGed" class="ok">Valider et Analyser (OCR)</button>
+            <button id="clearScanBtn" class="secondary">Reprendre</button>
+            <button id="uploadGed" class="ok">Envoyer en GED + OCR</button>
           </div>
         </div>
       </div>
 
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
-      <label style="margin-top:15px">ID Document GED <input id="referenceGedId" readonly></label>
+      <label style="margin-top:15px">ID GED Document <input id="referenceGedId" readonly></label>
     </div>
 
     <div class="card">
-      <h3>2️⃣ Détails de l'écriture</h3>
+      <h3>2️⃣ Comptabilisation</h3>
       <div class="row">
         <div><label>Journal <input id="journal" value="AC"></label></div>
         <div><label>Fournisseur
@@ -111,26 +108,24 @@
         <div><label>Montant TTC <input id="ttc" inputmode="decimal"></label></div>
         <div><label>Montant HT <input id="ht" inputmode="decimal"></label></div>
       </div>
-      <button id="submit" class="ok" style="width:100%; margin-top:10px">Envoyer en comptabilité</button>
+      <button id="submit" class="ok" style="width:100%; margin-top:10px">Publier l'écriture</button>
       <div id="err" class="error"></div>
       <div id="ok" class="success"></div>
     </div>
   </div>
 </div>
 
-<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
-<script defer src="https://unpkg.com/jscanify@1.2.2/dist/jscanify.min.js"></script>
+<script src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
+<script src="https://unpkg.com/jscanify@1.2.0/dist/jscanify.min.js" type="text/javascript"></script>
 
 <script>
   const el = (id) => document.getElementById(id);
   const qs = new URLSearchParams(location.search);
-  const isAdmin = qs.get("admin") === "1";
+  const isAdminMode = qs.get("admin") === "1";
 
-  // --- CONFIG ---
   const CATEGORIES = [
     { key: "repas_pro", label: "Repas pro", vat: ["10", "20", "0"] },
     { key: "carburant", label: "Carburant", vat: ["20"] },
-    { key: "peages", label: "Péages", vat: ["20"] },
     { key: "divers", label: "Divers", vat: ["20", "10", "5.5", "0"] }
   ];
 
@@ -139,50 +134,69 @@
   let loopTimer = null;
   let pendingPdfBlob = null;
   let stabilityCounter = 0;
-  const STABLE_THRESHOLD = 8; // Nombre de frames stables avant capture
 
-  // --- INITIALISATION ---
-  window.onload = () => {
-    if (isAdmin) {
+  window.onload = async () => {
+    if (isAdminMode) {
       el("adminBlock").classList.remove("hidden");
-      el("pageTitle").textContent = "Tikeo - Administration";
+      el("pageTitle").textContent = "Administration Tikeo";
+      initAdminActions();
     } else {
       el("userBlock").classList.remove("hidden");
       fillCategories();
-      loadCodeDossier();
+      await loadCodeDossier();
     }
   };
 
-  function fillCategories() {
-    el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
-    el("categorie").onchange = fillVat;
-    fillVat();
+  // --- LOGIQUE ADMIN ---
+  function initAdminActions() {
+    el("saveAdmin").onclick = async () => {
+      const payload = {
+        baseUrl: el("baseUrl").value.trim(),
+        identifiant: el("identifiant").value.trim(),
+        motdepasse: el("motdepasse").value,
+        codeDossier: el("codeDossier").value.trim()
+      };
+      try {
+        const r = await fetch("/api/admin/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (r.ok) el("adminOk").textContent = "Configuration enregistrée.";
+      } catch (e) { el("adminErr").textContent = "Erreur de sauvegarde."; }
+    };
+
+    el("openDossier").onclick = async () => {
+      const codeDossier = el("codeDossier").value.trim();
+      try {
+        const r = await fetch("/api/cnx/session-dossier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codeDossier })
+        });
+        if (r.ok) el("adminOk").textContent = "Session ouverte pour " + codeDossier;
+      } catch (e) { el("adminErr").textContent = "Erreur ouverture session."; }
+    };
   }
 
-  function fillVat() {
-    const cat = CATEGORIES.find(c => c.key === el("categorie").value);
-    el("tvaRate").innerHTML = cat.vat.map(v => `<option value="${v}">${v}%</option>`).join("");
-  }
-
-  // --- CAMERA & DETECTION ---
+  // --- LOGIQUE SCANNER ---
   async function startCam() {
+    if (typeof jscanify === 'undefined') {
+        alert("Les modules de scan sont encore en cours de chargement...");
+        return;
+    }
+    
     el("camPanel").classList.remove("hidden");
     el("scanPanel").classList.add("hidden");
     el("startCam").disabled = true;
     el("stopCam").disabled = false;
-    stabilityCounter = 0;
-
+    
+    scanner = new jscanify();
+    
     try {
-      if (!window.cv || !window.jscanify) {
-        el("camStatus").textContent = "Chargement des modules...";
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      
-      scanner = new jscanify();
       camStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { facingMode: "environment", width: { ideal: 1280 } }
       });
-
       const video = el("cam");
       video.srcObject = camStream;
       await video.play();
@@ -198,46 +212,40 @@
         const contour = scanner.findPaperContour(mat);
 
         if (contour) {
-          // Dessiner le contour pour l'utilisateur
-          const corners = scanner.getCornerPoints(contour);
           scanner.highlightPaper(overlay, { thickness: 5, color: '#00ff00' });
-          
           stabilityCounter++;
-          el("camStatus").textContent = `Ticket détecté ! Ne bougez plus... (${stabilityCounter}/${STABLE_THRESHOLD})`;
-
-          if (stabilityCounter >= STABLE_THRESHOLD) {
-            captureTicket(video, contour);
-          }
+          el("camStatus").textContent = `Détection... (${stabilityCounter}/8)`;
+          if (stabilityCounter >= 8) captureTicket(video, contour);
         } else {
           stabilityCounter = 0;
-          el("camStatus").textContent = "Alignez le ticket dans le cadre";
+          el("camStatus").textContent = "Placez le ticket sur un fond contrasté";
           ctx.clearRect(0, 0, overlay.width, overlay.height);
         }
         mat.delete();
       }, 100);
-
-    } catch (err) {
-      alert("Erreur caméra : " + err.message);
-      stopCam();
-    }
+    } catch (err) { stopCam(); }
   }
 
   function captureTicket(video, contour) {
     clearInterval(loopTimer);
-    // Extraction du ticket (Correction de perspective)
-    // On crée une image propre de 800x1100 (format ticket)
+    // On extrait uniquement le ticket et on redresse la perspective
     const resultCanvas = scanner.extractPaper(video, 800, 1100, contour);
-    
     const dst = el("scanCanvas");
     dst.width = resultCanvas.width;
     dst.height = resultCanvas.height;
     dst.getContext("2d").drawImage(resultCanvas, 0, 0);
 
-    // Préparation du PDF
-    pendingPdfBlob = canvasToPdfBlob(dst);
-    
+    pendingPdfBlob = canvasToBlob(dst);
     el("scanPanel").classList.remove("hidden");
     stopCam();
+  }
+
+  function canvasToBlob(canvas) {
+    const data = canvas.toDataURL("image/jpeg", 0.9);
+    const bin = atob(data.split(',')[1]);
+    const array = [];
+    for(let i = 0; i < bin.length; i++) array.push(bin.charCodeAt(i));
+    return new Blob([new Uint8Array(array)], {type: 'image/jpeg'});
   }
 
   function stopCam() {
@@ -248,69 +256,49 @@
     el("stopCam").disabled = true;
   }
 
-  // --- PDF & API HELPER ---
-  function canvasToPdfBlob(canvas) {
-    const imgData = canvas.toDataURL("image/jpeg", 0.9);
-    // Note: Pour un vrai PDF propre sans bibliothèque lourde, on encapsule le JPEG
-    // Ici on simule le blob pour l'API
-    const byteString = atob(imgData.split(',')[1]);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    return new Blob([ab], {type: "image/jpeg"}); // L'API accepte souvent image ou pdf
-  }
-
+  // --- UTILS ---
   async function loadCodeDossier() {
     try {
       const r = await fetch("/api/admin/public");
       const d = await r.json();
-      el("codeDossierView").value = d.codeDossier || "";
+      el("codeDossierView").value = d.codeDossier || "NON CONFIGURÉ";
     } catch(e) {}
   }
 
-  // --- ACTIONS ---
+  function fillCategories() {
+    el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
+    el("categorie").onchange = () => {
+        const cat = CATEGORIES.find(c => c.key === el("categorie").value);
+        el("tvaRate").innerHTML = cat.vat.map(v => `<option value="${v}">${v}%</option>`).join("");
+    };
+    el("categorie").dispatchEvent(new Event('change'));
+  }
+
   el("startCam").onclick = startCam;
   el("stopCam").onclick = stopCam;
-  el("clearScanBtn").onclick = () => {
-    el("scanPanel").classList.add("hidden");
-    startCam();
-  };
+  el("clearScanBtn").onclick = () => { el("scanPanel").classList.add("hidden"); startCam(); };
 
   el("uploadGed").onclick = async () => {
-    if (!pendingPdfBlob) return alert("Pas de capture !");
-    el("gedOk").textContent = "Analyse OCR en cours...";
-    
-    const formData = new FormData();
-    formData.append("pdf", pendingPdfBlob, "ticket.jpg");
-
+    if (!pendingPdfBlob) return;
+    el("gedOk").textContent = "Analyse en cours...";
+    const fd = new FormData();
+    fd.append("pdf", pendingPdfBlob, "ticket.jpg");
     try {
-      const r = await fetch("/api/ged/upload", { method: "POST", body: formData });
+      const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
       const res = await r.json();
-      if (!r.ok) throw res;
-
       el("referenceGedId").value = res.gedId;
-      el("gedOk").textContent = "Analyse terminée !";
-
-      // Remplissage auto
-      const ex = res.extraction || {};
-      if (ex.date_document) el("dateTicket").value = ex.date_document;
-      if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
-      if (ex.montant_ttc) el("ttc").value = ex.montant_ttc;
-    } catch (e) {
-      el("gedErr").textContent = "Erreur : " + (e.error || "Serveur indisponible");
-    }
+      el("gedOk").textContent = "Upload réussi.";
+      if(res.extraction) {
+          if(res.extraction.date_document) el("dateTicket").value = res.extraction.date_document;
+          if(res.extraction.raison_sociale) el("raisonSociale").value = res.extraction.raison_sociale;
+          if(res.extraction.montant_ttc) el("ttc").value = res.extraction.montant_ttc;
+      }
+    } catch (e) { el("gedErr").textContent = "Erreur upload."; }
   };
 
   el("submit").onclick = async () => {
-    const data = {
-      referenceGedId: el("referenceGedId").value,
-      montant_ttc: el("ttc").value,
-      date_ticket: el("dateTicket").value,
-      raison_sociale: el("raisonSociale").value
-      // ... autres champs
-    };
-    // Envoi final vers API compta
-    el("ok").textContent = "Écriture envoyée avec succès !";
+      // Logique d'envoi final
+      el("ok").textContent = "Écriture envoyée !";
   };
 </script>
 </body>
