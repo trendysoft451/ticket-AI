@@ -6,7 +6,7 @@
   <title>Frais — GED + OCR</title>
   <style>
     body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#222}
-    .container{max-width:900px;margin:40px auto;padding:20px}
+    .container{max-width:980px;margin:40px auto;padding:20px}
     .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
     label{display:block;margin-bottom:12px;font-size:14px}
     input,select,textarea{width:100%;padding:8px;margin-top:4px;border-radius:4px;border:1px solid #ccc;font-size:14px}
@@ -15,10 +15,21 @@
     .row>div{flex:1}
     button{padding:10px 16px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold}
     button:hover{background:#0056b3}
+    button.secondary{background:#6c757d}
+    button.secondary:hover{background:#545b62}
+    button.ok{background:#28a745}
+    button.ok:hover{background:#1e7e34}
     .error{color:#c00;margin-top:10px;font-size:13px;white-space:pre-wrap}
     .success{color:#0a7a2a;margin-top:10px;font-size:13px;white-space:pre-wrap}
     .hidden{display:none}
     .hint{font-size:12px;color:#666;margin-top:-8px;margin-bottom:10px}
+    .previewWrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+    .previewBox{border:1px solid #ddd;border-radius:8px;padding:10px;background:#fafafa}
+    canvas{max-width:420px;width:100%;height:auto;border-radius:6px;background:#fff}
+    video{max-width:420px;width:100%;border-radius:8px;background:#000}
+    .small{font-size:12px;color:#555}
+    .btnRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#eee;font-size:12px}
   </style>
 </head>
 <body>
@@ -51,8 +62,10 @@
     </label>
     <div class="hint">Requis : l’upload GED est bloqué si vide.</div>
 
-    <button id="saveAdmin">Enregistrer</button>
-    <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
+    <div class="btnRow">
+      <button id="saveAdmin">Enregistrer</button>
+      <button id="openDossier" class="ok">Ouvrir dossier</button>
+    </div>
 
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
@@ -60,23 +73,72 @@
 
   <!-- USER -->
   <div id="userBlock" class="hidden">
-    <p>1) Upload PDF en GED + OCR → 2) Ajuste puis envoie l’écriture</p>
+    <p>Choisis un PDF, ou scanne en live avec auto-capture (10 fps). Ensuite GED + OCR puis envoi écriture.</p>
 
     <div class="card">
-      <h3>1️⃣ Upload PDF en GED + OCR</h3>
+      <h3>1️⃣ Scan + Upload GED + OCR</h3>
 
       <label>Code dossier (admin)
         <input id="codeDossierView" readonly>
       </label>
 
-      <label>PDF à envoyer (ou photo depuis mobile)
-        <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
-      </label>
-      <div class="hint">
-        Photo : rotation EXIF + détection bord à bord + redressement perspective + conversion PDF.
+      <div class="row">
+        <div>
+          <label>Importer un PDF (déjà scanné)
+            <input type="file" id="fileInput" accept="application/pdf">
+          </label>
+        </div>
+        <div>
+          <label>Ou scanner avec la caméra (auto-capture)
+            <div class="btnRow">
+              <button id="startCam">Démarrer caméra</button>
+              <button id="stopCam" class="secondary" disabled>Stop</button>
+            </div>
+            <div class="hint">Réglage auto : 1280×720, traitement ~10 fps.</div>
+          </label>
+        </div>
       </div>
 
-      <button id="uploadGed">Envoyer + OCR</button>
+      <!-- LIVE CAMERA + OVERLAY -->
+      <div id="camPanel" class="previewWrap hidden">
+        <div class="previewBox">
+          <div class="small">
+            <b>Caméra</b>
+            <span id="camPill" class="pill">init…</span>
+          </div>
+          <video id="cam" playsinline muted></video>
+          <canvas id="frame" class="hidden"></canvas>
+        </div>
+
+        <div class="previewBox">
+          <div class="small"><b>Overlay détection</b></div>
+          <canvas id="overlay"></canvas>
+          <div id="camStatus" class="small"></div>
+          <div id="camErr" class="error"></div>
+        </div>
+      </div>
+
+      <!-- PREVIEW (scanned result) -->
+      <div id="scanPanel" class="previewWrap hidden">
+        <div class="previewBox">
+          <div class="small"><b>Aperçu final (ticket extrait)</b></div>
+          <canvas id="scanCanvas"></canvas>
+          <div class="small" id="scanMeta"></div>
+        </div>
+
+        <div class="previewBox" style="min-width:260px">
+          <div class="small"><b>Actions</b></div>
+          <div class="btnRow" style="margin-top:10px">
+            <button id="clearScanBtn" class="secondary">Annuler</button>
+            <button id="uploadGed" class="ok">Envoyer GED + OCR</button>
+          </div>
+          <div class="hint" style="margin-top:10px">
+            Auto-capture : quand le ticket est stable (cadre OK) → capture + recadrage → aperçu.
+          </div>
+          <div id="scanErr" class="error"></div>
+          <div id="scanOk" class="success"></div>
+        </div>
+      </div>
 
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
@@ -155,7 +217,7 @@
         <input id="tvaMontant" inputmode="decimal" placeholder="2,32">
       </label>
 
-      <button id="submit">Envoyer l’écriture</button>
+      <button id="submit" class="ok">Envoyer l’écriture</button>
       <div id="err" class="error"></div>
       <div id="ok" class="success"></div>
     </div>
@@ -169,6 +231,8 @@
 
 <!-- OpenCV.js -->
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<!-- jscanify (UMD) -->
+<script defer src="https://unpkg.com/jscanify@1.2.2/dist/jscanify.min.js"></script>
 
 <script>
   const el = (id) => document.getElementById(id);
@@ -240,189 +304,23 @@
   }
 
   /** ===== OpenCV ready ===== */
-  function waitForOpenCV(timeoutMs = 12000) {
-    return new Promise((resolve, reject) => {
-      const start = Date.now();
-      (function poll(){
-        if (window.cv && cv.Mat) return resolve();
-        if (Date.now() - start > timeoutMs) return reject(new Error("OpenCV.js non chargé (réseau ?)"));
-        setTimeout(poll, 60);
-      })();
-    });
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+  async function waitForOpenCV(timeoutMs=15000){
+    const t0 = Date.now();
+    while(!(window.cv && cv.Mat)){
+      if(Date.now()-t0>timeoutMs) throw new Error("OpenCV.js non chargé (réseau ?)");
+      await sleep(60);
+    }
+  }
+  async function waitForJscanify(timeoutMs=15000){
+    const t0 = Date.now();
+    while(!(window.jscanify)){
+      if(Date.now()-t0>timeoutMs) throw new Error("jscanify non chargé (réseau ?)");
+      await sleep(60);
+    }
   }
 
-  /** rotation EXIF auto si support */
-  async function loadImageBitmapWithOrientation(file) {
-    if (window.createImageBitmap) {
-      try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
-      catch { return await createImageBitmap(file); }
-    }
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = url;
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-    URL.revokeObjectURL(url);
-    return img;
-  }
-
-  function drawBitmapToCanvas(bitmap, maxW = 2200) {
-    let w = bitmap.width, h = bitmap.height;
-    if (w > maxW) { const r = maxW / w; w = Math.round(w*r); h = Math.round(h*r); }
-    const canvas = document.createElement("canvas");
-    canvas.width = w; canvas.height = h;
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
-    return canvas;
-  }
-
-  function orderCorners(pts) {
-    const sum = pts.map(p => p.x + p.y);
-    const diff = pts.map(p => p.x - p.y);
-    const tl = pts[sum.indexOf(Math.min(...sum))];
-    const br = pts[sum.indexOf(Math.max(...sum))];
-    const tr = pts[diff.indexOf(Math.max(...diff))];
-    const bl = pts[diff.indexOf(Math.min(...diff))];
-    return [tl, tr, br, bl];
-  }
-  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
-
-  /**
-   * Amélioration ombres/contraste + détection quadrilatère + warp perspective
-   * Retourne canvas "ticket bord à bord" ou fallback canvas original si non détecté.
-   */
-  function scanTicketOpenCV(srcCanvas) {
-    const src = cv.imread(srcCanvas);
-
-    const gray = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-    // --- 1) CLAHE pour corriger ombres / contraste local ---
-    let claheOut = new cv.Mat();
-    try {
-      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
-      clahe.apply(gray, claheOut);
-      clahe.delete();
-    } catch {
-      claheOut = gray.clone(); // fallback
-    }
-
-    // --- 2) léger blur ---
-    const blur = new cv.Mat();
-    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
-
-    // --- 3) adaptive threshold (meilleur sur table claire + ombres) ---
-    const thr = new cv.Mat();
-    cv.adaptiveThreshold(
-      blur, thr, 255,
-      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-      cv.THRESH_BINARY,
-      31, // block size
-      8   // C
-    );
-
-    // --- 4) inversion pour contours (optionnel mais souvent mieux) ---
-    const inv = new cv.Mat();
-    cv.bitwise_not(thr, inv);
-
-    // --- 5) morpho pour fermer les ruptures ---
-    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
-    const morphed = new cv.Mat();
-    cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel);
-
-    // --- 6) edges + contours ---
-    const edges = new cv.Mat();
-    cv.Canny(morphed, edges, 60, 180);
-
-    const contours = new cv.MatVector();
-    const hierarchy = new cv.Mat();
-    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    let best = null;
-    let bestArea = 0;
-
-    for (let i = 0; i < contours.size(); i++) {
-      const cnt = contours.get(i);
-      const peri = cv.arcLength(cnt, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-
-      if (approx.rows === 4) {
-        const area = cv.contourArea(approx);
-        if (area > bestArea) { bestArea = area; best = approx; }
-      }
-
-      approx.delete();
-      cnt.delete();
-    }
-
-    const minArea = src.rows * src.cols * 0.18; // seuil assez strict pour éviter faux positifs
-    if (!best || bestArea < minArea) {
-      // cleanup
-      src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-      kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-      if (best) best.delete();
-      return srcCanvas; // fallback
-    }
-
-    // 4 points
-    const pts = [];
-    for (let i = 0; i < 4; i++) {
-      pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
-    }
-    const [tl, tr, br, bl] = orderCorners(pts);
-
-    // dimensions cible
-    const widthA = dist(br, bl);
-    const widthB = dist(tr, tl);
-    const maxWidth = Math.max(widthA, widthB);
-
-    const heightA = dist(tr, br);
-    const heightB = dist(tl, bl);
-    const maxHeight = Math.max(heightA, heightB);
-
-    let dstW = Math.max(1, Math.round(maxWidth));
-    let dstH = Math.max(1, Math.round(maxHeight));
-
-    // Limite sortie (perf)
-    const maxOutW = 2200;
-    if (dstW > maxOutW) {
-      const r = maxOutW / dstW;
-      dstW = Math.round(dstW * r);
-      dstH = Math.round(dstH * r);
-    }
-
-    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
-    ]);
-    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0, dstW-1, 0, dstW-1, dstH-1, 0, dstH-1
-    ]);
-
-    const M = cv.getPerspectiveTransform(srcTri, dstTri);
-    const warped = new cv.Mat();
-    cv.warpPerspective(src, warped, M, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-
-    // sortie canvas
-    const outCanvas = document.createElement("canvas");
-    outCanvas.width = dstW;
-    outCanvas.height = dstH;
-    cv.imshow(outCanvas, warped);
-
-    // cleanup
-    src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-    kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    best.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
-
-    return outCanvas;
-  }
-
-  async function imageFileToTicketCanvas(imageFile) {
-    await waitForOpenCV();
-    const bitmap = await loadImageBitmapWithOrientation(imageFile);
-    const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
-    return scanTicketOpenCV(baseCanvas);
-  }
-
-  /** ===== JPEG + PDF minimal ===== */
+  /** ===== PDF from canvas (minimal) ===== */
   function canvasToJpegBytes(canvas, quality = 0.86) {
     const dataUrl = canvas.toDataURL("image/jpeg", quality);
     const base64 = dataUrl.split(",")[1];
@@ -434,7 +332,7 @@
   function strToBytes(s) { return new TextEncoder().encode(s); }
 
   function jpegToPdfBlob(jpegBytes, imgW, imgH) {
-    const pageW = 595, pageH = 842; // A4 points
+    const pageW = 595, pageH = 842;
     const margin = 24;
     const boxW = pageW - 2*margin;
     const boxH = pageH - 2*margin;
@@ -455,7 +353,6 @@
     function markObj() { objOffsets.push(cursor); }
 
     addChunk("%PDF-1.4\n%âãÏÓ\n");
-
     markObj(); addChunk("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
     markObj(); addChunk("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
     markObj(); addChunk(
@@ -487,13 +384,190 @@
     return new Blob(chunks, { type: "application/pdf" });
   }
 
-  async function imageFileToPdfBlob(imageFile) {
-    const canvas = await imageFileToTicketCanvas(imageFile);
+  function canvasToPdfBlob(canvas) {
     const { bytes, w, h } = canvasToJpegBytes(canvas, 0.86);
     return jpegToPdfBlob(bytes, w, h);
   }
 
-  /** ===== UI ===== */
+  /** ===== State upload ===== */
+  let pendingPdfBlob = null;
+  let pendingPdfFilename = "ticket.pdf";
+
+  function showPreviewCanvas(canvas) {
+    const dst = el("scanCanvas");
+    dst.width = canvas.width;
+    dst.height = canvas.height;
+    dst.getContext("2d").drawImage(canvas, 0, 0);
+  }
+
+  function resetAll() {
+    pendingPdfBlob = null;
+    pendingPdfFilename = "ticket.pdf";
+    el("fileInput").value = "";
+    el("referenceGedId").value = "";
+    el("gedErr").textContent = "";
+    el("gedOk").textContent = "";
+    el("scanErr").textContent = "";
+    el("scanOk").textContent = "";
+    el("scanMeta").textContent = "";
+    el("scanPanel").classList.add("hidden");
+    const c = el("scanCanvas"); c.width = 1; c.height = 1;
+  }
+
+  /** ===== jscanify live camera (10 fps) + auto capture ===== */
+  let scanner = null;
+  let camStream = null;
+  let loopTimer = null;
+  let lastCornerPoints = null;
+  let stableCount = 0;
+  let autoCaptured = false;
+
+  const TARGET_FPS = 10;               // ✅ 10 fps
+  const LOOP_MS = Math.round(1000 / TARGET_FPS);
+  const STABLE_FRAMES = 6;             // ~0.6s stable
+  const AUTO_CAPTURE_COOLDOWN_MS = 2500;
+
+  async function startCam() {
+    el("camErr").textContent = "";
+    el("camStatus").textContent = "";
+    el("camPanel").classList.remove("hidden");
+    el("camPill").textContent = "init…";
+    el("stopCam").disabled = false;
+    el("startCam").disabled = true;
+
+    try {
+      await waitForOpenCV();
+      await waitForJscanify();
+
+      scanner = new jscanify();
+
+      const video = el("cam");
+      const frame = el("frame");
+      const overlay = el("overlay");
+      const frameCtx = frame.getContext("2d");
+      const overlayCtx = overlay.getContext("2d");
+
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },     // ✅ 1280×720
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+
+      video.srcObject = camStream;
+      await video.play();
+
+      // Use actual stream dimensions (iOS sometimes differs)
+      const w = video.videoWidth || 1280;
+      const h = video.videoHeight || 720;
+      frame.width = w; frame.height = h;
+      overlay.width = w; overlay.height = h;
+
+      el("camPill").textContent = `${w}×${h} @${TARGET_FPS}fps`;
+      el("camStatus").textContent = "Détection… garde les 4 coins visibles.";
+      stableCount = 0;
+      lastCornerPoints = null;
+      autoCaptured = false;
+
+      // main loop ~10 fps
+      loopTimer = setInterval(() => {
+        try {
+          if (!video.videoWidth || !video.videoHeight) return;
+
+          frameCtx.drawImage(video, 0, 0, w, h);
+
+          // highlight overlay
+          const highlightedCanvas = scanner.highlightPaper(frame);
+          overlayCtx.clearRect(0, 0, w, h);
+          overlayCtx.drawImage(highlightedCanvas, 0, 0);
+
+          // get corners (needs Mat)
+          const mat = cv.imread(frame);
+          const contour = scanner.findPaperContour(mat);
+          mat.delete();
+
+          if (contour) {
+            const pts = scanner.getCornerPoints(contour);
+            contour.delete?.();
+
+            lastCornerPoints = pts;
+            stableCount++;
+          } else {
+            lastCornerPoints = null;
+            stableCount = 0;
+          }
+
+          const stable = stableCount >= STABLE_FRAMES;
+
+          el("camStatus").textContent = stable
+            ? "Ticket détecté ✅ auto-capture…"
+            : "Détection… garde les 4 coins visibles.";
+
+          // ✅ auto-capture when stable
+          if (stable && !autoCaptured) {
+            autoCaptured = true;
+            try {
+              doAutoCapture(frame, lastCornerPoints);
+            } catch (e) {
+              el("camErr").textContent = String(e.message || e);
+              autoCaptured = false;
+            }
+            // cooldown to avoid multiple captures
+            setTimeout(() => { autoCaptured = false; stableCount = 0; }, AUTO_CAPTURE_COOLDOWN_MS);
+          }
+
+        } catch (e) {
+          // reset stability if something transient happens
+          lastCornerPoints = null;
+          stableCount = 0;
+        }
+      }, LOOP_MS);
+
+    } catch (e) {
+      el("camErr").textContent = String(e.message || e);
+      stopCam();
+      el("startCam").disabled = false;
+    }
+  }
+
+  function stopCam() {
+    if (loopTimer) { clearInterval(loopTimer); loopTimer = null; }
+    if (camStream) {
+      camStream.getTracks().forEach(t => t.stop());
+      camStream = null;
+    }
+    el("stopCam").disabled = true;
+    el("startCam").disabled = false;
+    el("camPanel").classList.add("hidden");
+    el("camStatus").textContent = "";
+    el("camPill").textContent = "off";
+    el("camErr").textContent = "";
+  }
+
+  function doAutoCapture(frameCanvas, cornerPoints) {
+    // Extract paper (perspective corrected)
+    const outW = 1200; // output size (adjust ok)
+    const outH = 1700;
+    const extracted = scanner.extractPaper(frameCanvas, outW, outH, cornerPoints);
+    if (!extracted) throw new Error("Extraction impossible (ticket non extrait).");
+
+    // Show preview + build PDF blob (only ticket)
+    showPreviewCanvas(extracted);
+    pendingPdfBlob = canvasToPdfBlob(extracted);
+    pendingPdfFilename = "scan_ticket.pdf";
+
+    el("scanPanel").classList.remove("hidden");
+    el("scanOk").textContent = "Auto-capture OK — aperçu prêt. Tu peux envoyer GED + OCR.";
+    el("scanErr").textContent = "";
+    el("scanMeta").textContent = `Auto-capture (${outW}×${outH})`;
+
+    // Optional: stop camera once captured to save battery
+    stopCam();
+  }
+
+  /** ===== Page init ===== */
   if (isAdmin) {
     el("pageTitle").textContent = "Admin";
     el("adminBlock").classList.remove("hidden");
@@ -557,6 +631,28 @@
       if (!cd) el("gedErr").textContent = "Code dossier non configuré. Va sur /?admin=1.";
     })();
 
+    // PDF import
+    el("fileInput").addEventListener("change", () => {
+      resetAll();
+      const f = el("fileInput").files[0];
+      if (!f) return;
+      pendingPdfBlob = f;
+      pendingPdfFilename = f.name || "ticket.pdf";
+      el("scanPanel").classList.remove("hidden");
+      el("scanOk").textContent = "PDF prêt. Tu peux envoyer GED + OCR.";
+      el("scanMeta").textContent = "PDF importé";
+    });
+
+    // camera buttons
+    el("startCam").addEventListener("click", startCam);
+    el("stopCam").addEventListener("click", stopCam);
+
+    // clear scan
+    el("clearScanBtn").addEventListener("click", () => {
+      resetAll();
+    });
+
+    // upload GED + OCR
     el("uploadGed").addEventListener("click", async () => {
       el("gedErr").textContent = "";
       el("gedOk").textContent = "";
@@ -569,29 +665,14 @@
         el("gedErr").textContent = "Upload bloqué : code dossier manquant. Va sur /?admin=1.";
         return;
       }
-
-      const file = el("fileInput").files[0];
-      if (!file) { el("gedErr").textContent = "Choisis un PDF ou prends une photo."; return; }
-
-      let pdfBlob = null;
-      let filename = "ticket.pdf";
+      if (!pendingPdfBlob) {
+        el("gedErr").textContent = "Choisis un PDF ou utilise la caméra (auto-capture) d’abord.";
+        return;
+      }
 
       try {
-        const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
-        const isImg = (file.type || "").startsWith("image/");
-
-        if (isPdf) {
-          pdfBlob = file;
-          filename = file.name || "ticket.pdf";
-        } else if (isImg) {
-          pdfBlob = await imageFileToPdfBlob(file);
-          filename = "photo_ticket.pdf";
-        } else {
-          throw new Error("Format non supporté. Utilise PDF ou image.");
-        }
-
         const form = new FormData();
-        form.append("pdf", pdfBlob, filename);
+        form.append("pdf", pendingPdfBlob, pendingPdfFilename);
 
         const resp = await fetch("/api/ged/upload", { method: "POST", body: form });
         const out = await resp.json();
@@ -624,6 +705,7 @@
       }
     });
 
+    // send ecriture
     el("submit").addEventListener("click", async () => {
       el("err").textContent = "";
       el("ok").textContent = "";
