@@ -1,132 +1,668 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tikeo Scan</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tikeo - Gestion des frais</title>
   <style>
-    body{margin:0;font-family:sans-serif;background:#f4f7f9;color:#333}
-    .container{max-width:600px;margin:20px auto;padding:15px}
-    .card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,0.1);margin-bottom:20px}
-    .btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    button{padding:12px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;background:#007bff;color:#fff}
-    button.secondary{background:#6c757d}
-    button.ok{background:#28a745}
+    body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#222}
+    .container{max-width:900px;margin:40px auto;padding:20px}
+    .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+    label{display:block;margin-bottom:12px;font-size:14px}
+    input,select,textarea{width:100%;padding:8px;margin-top:4px;border-radius:4px;border:1px solid #ccc;font-size:14px}
+    textarea{min-height:180px;font-family:monospace}
+    .row{display:flex;gap:20px}
+    .row>div{flex:1}
+    button{padding:10px 16px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold}
+    button:hover{background:#0056b3}
+    .error{color:#c00;margin-top:10px;font-size:13px;white-space:pre-wrap}
+    .success{color:#0a7a2a;margin-top:10px;font-size:13px;white-space:pre-wrap}
     .hidden{display:none}
-    video, canvas { width: 100%; border-radius: 8px; background:#000 }
-    input, select { width:100%; padding:10px; margin:8px 0; border:1px solid #ccc; border-radius:6px; box-sizing:border-box}
-    .status{padding:10px; border-radius:6px; margin:10px 0; font-size:14px}
-    .success{background:#e8f5e9; color:#2e7d32}
+    .hint{font-size:12px;color:#666;margin-top:-8px;margin-bottom:10px}
   </style>
 </head>
 <body>
 <div class="container">
-  <div class="card">
-    <h3>1️⃣ Source du document</h3>
-    <div class="btn-grid">
-      <button id="btnCam">📸 Caméra</button>
-      <button id="btnFile" class="secondary">📁 PDF</button>
-    </div>
-    <input type="file" id="fileInput" accept="application/pdf" class="hidden">
-    
-    <div id="camPanel" class="hidden" style="position:relative; margin-top:15px">
-      <video id="video" playsinline muted></video>
-      <canvas id="overlay" style="position:absolute; top:0; left:0"></canvas>
-      <div id="camMsg" style="text-align:center; color:#007bff; font-weight:bold">Initialisation...</div>
+<center><img src="http://www.image-heberg.fr/files/1771946239507659589.png" ></center>
+  <h1 id="pageTitle">Gestion des frais</h1>
+
+  <!-- ADMIN -->
+  <div id="adminBlock" class="card hidden">
+    <h3>Admin</h3>
+
+    <label>CNX base URL (ex: https://isuiteacd.suiteexpert.fr/cnx/api)
+      <input id="baseUrl" placeholder="https://isuiteacd.suiteexpert.fr/cnx/api">
+    </label>
+
+    <div class="row">
+      <div>
+        <label>Identifiant
+          <input id="identifiant" placeholder="...">
+        </label>
+      </div>
+      <div>
+        <label>Mot de passe
+          <input id="motdepasse" type="password" placeholder="...">
+        </label>
+      </div>
     </div>
 
-    <div id="previewPanel" class="hidden">
-      <p><b>Aperçu du document :</b></p>
-      <canvas id="outCanvas"></canvas>
-      <button id="btnUpload" class="ok" style="width:100%; margin-top:10px">🚀 Analyser le document</button>
-    </div>
-    <div id="ocrStatus" class="status hidden"></div>
+    <label>Code dossier (ex: DA_CONSEIL)
+      <input id="codeDossier" placeholder="DA_CONSEIL">
+    </label>
+    <div class="hint">Requis : l’upload GED est bloqué si vide.</div>
+
+    <button id="saveAdmin">Enregistrer</button>
+    <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
+
+    <div id="adminErr" class="error"></div>
+    <div id="adminOk" class="success"></div>
   </div>
 
-  <div class="card">
-    <h3>2️⃣ Détails comptables</h3>
-    <label>Dossier: <input id="viewDossier" readonly></label>
-    <div class="btn-grid">
-      <input id="dateDoc" type="date">
-      <input id="ttc" placeholder="Montant TTC">
+  <!-- USER -->
+  <div id="userBlock" class="hidden">
+  
+    <div class="card">
+      <h3>1️⃣ Scannez le ticket ou importez le PDF</h3>
+
+      <label>Code dossier comptable
+        <input id="codeDossierView" readonly>
+      </label>
+
+      <label>Ticket à envoyer (Par photo en mobile)
+        <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
+      </label>
+      <div class="hint">
+     
+      </div>
+
+      <button id="uploadGed">Envoyer le ticket</button>
+
+      <div id="gedErr" class="error"></div>
+      <div id="gedOk" class="success"></div>
+
+      <label>
+        <input id="referenceGedId" readonly>
+      </label>
     </div>
-    <input id="raison" placeholder="Raison sociale">
-    <button id="btnSubmit" class="ok" style="width:100%">✅ Valider l'écriture</button>
+
+    <div class="card">
+      <h3>2️⃣ Écriture comptable</h3>
+
+      <div class="row">
+        <div>
+          <label>Journal
+            <input id="journal" value="AC">
+          </label>
+        </div>
+        <div>
+          <label>Fournisseur
+            <select id="compteFournisseur">
+              <option value="FREPAS">FREPAS</option>
+              <option value="FCARBU">FCARBU</option>
+              <option value="FPARKING">FPARKING</option>
+              <option value="FPEAGE">FPEAGE</option>
+              <option value="FDIVERS" selected>FDIVERS</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Catégorie dépenses
+            <select id="categorie"></select>
+          </label>
+        </div>
+        <div>
+          <label>TVA (%)
+            <select id="tvaRate"></select>
+          </label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Date ticket (YYYY-MM-DD)
+            <input id="dateTicket" placeholder="2025-01-02">
+          </label>
+        </div>
+        <div>
+          <label>Numéro ticket (si vide → auto T0001, T0002…)
+            <input id="numeroTicket" placeholder="ex: T0001">
+          </label>
+        </div>
+      </div>
+
+      <label>Raison sociale (libellé)
+        <input id="raisonSociale" placeholder="ex: L'ATELIER DE LA PAIX">
+      </label>
+
+      <div class="row">
+        <div>
+          <label>Montant TTC
+            <input id="ttc" inputmode="decimal" placeholder="25,50">
+          </label>
+        </div>
+        <div>
+          <label>Montant HT
+            <input id="ht" inputmode="decimal" placeholder="23,18">
+          </label>
+        </div>
+      </div>
+
+      <label>Montant TVA
+        <input id="tvaMontant" inputmode="decimal" placeholder="2,32">
+      </label>
+
+      <button id="submit">Envoyer l’écriture</button>
+      <div id="err" class="error"></div>
+      <div id="ok" class="success"></div>
+    </div>
+
+    <div id="debugCard" class="card hidden">
+      <h3>Debug (/?debug=1)</h3>
+      <textarea id="debugOut" readonly></textarea>
+    </div>
   </div>
 </div>
 
-<script src="https://docs.opencv.org/4.x/opencv.js" async></script>
-<script src="https://unpkg.com/jscanify@1.2.0/dist/jscanify.min.js" defer></script>
+<!-- OpenCV.js -->
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <script>
-  const $ = id => document.getElementById(id);
-  let scanner, stream, loop, docBlob;
+  const el = (id) => document.getElementById(id);
+  const qs = new URLSearchParams(location.search);
+  const isAdmin = qs.get("admin") === "1";
+  const isDebug = qs.get("debug") === "1";
 
-  // --- CAMERA LOGIC ---
-  $('btnCam').onclick = async () => {
-    $('camPanel').classList.remove('hidden');
-    scanner = new jscanify();
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    $('video').srcObject = stream;
-    $('video').play();
-    
-    const ctx = $('overlay').getContext('2d');
-    loop = setInterval(() => {
-      if (!$('video').videoWidth) return;
-      $('overlay').width = $('video').videoWidth;
-      $('overlay').height = $('video').videoHeight;
-      ctx.drawImage($('video'), 0, 0);
-      const mat = cv.imread($('video'));
-      const contour = scanner.findPaperContour(mat);
-      if (contour) {
-        scanner.highlightPaper($('overlay'), { color: '#00ff00', thickness: 5 });
-        if (++this.stab > 10) capture(contour);
-      } else { this.stab = 0; }
-      mat.delete();
-    }, 100);
-  };
+  const CATEGORIES = [
+    { key: "petites_fournitures", label: "Petites fournitures et entretien", vat: ["20","10"] },
+    { key: "papeterie", label: "Papeterie", vat: ["20"] },
+    { key: "carburant", label: "Carburant", vat: ["20"] },
+    { key: "repas_pro", label: "Repas pro", vat: ["10"] },
+    { key: "repas", label: "Repas (TVA 0%)", vat: ["0"] },
+    { key: "peages", label: "Péages", vat: ["20"] },
+    { key: "parking", label: "Parking", vat: ["20"] }
+  ];
 
-  function capture(contour) {
-    clearInterval(loop);
-    const canvas = scanner.extractPaper($('video'), 800, 1100, contour);
-    $('outCanvas').width = 800; $('outCanvas').height = 1100;
-    $('outCanvas').getContext('2d').drawImage(canvas, 0, 0);
-    canvas.toBlob(b => docBlob = b, 'image/jpeg', 0.9);
-    $('previewPanel').classList.remove('hidden');
-    stream.getTracks().forEach(t => t.stop());
-    $('camPanel').classList.add('hidden');
+  function toNumOrNull(v){
+    const s = String(v || "").trim().replace(",", ".");
+    if (!s) return null;
+    const x = Number(s);
+    return Number.isFinite(x) ? x : null;
   }
 
-  // --- FILE LOGIC ---
-  $('btnFile').onclick = () => $('fileInput').click();
-  $('fileInput').onchange = e => {
-    docBlob = e.target.files[0];
-    $('previewPanel').classList.remove('hidden');
-    $('outCanvas').classList.add('hidden');
-  };
+  function setSelect(selectEl, value){
+    if (!value) return;
+    const opt = [...selectEl.options].find(o => o.value === value);
+    if (opt) selectEl.value = value;
+  }
 
-  // --- UPLOAD & OCR ---
-  $('btnUpload').onclick = async () => {
-    const fd = new FormData();
-    fd.append('pdf', docBlob, docBlob.name || "scan.jpg");
-    $('ocrStatus').className = "status"; $('ocrStatus').textContent = "Analyse...";
-    $('ocrStatus').classList.remove('hidden');
-    
-    const r = await fetch('/api/ged/upload', { method: 'POST', body: fd });
-    const res = await r.json();
-    
-    $('ocrStatus').classList.add('success');
-    $('ocrStatus').textContent = "Analyse terminée !";
-    $('dateDoc').value = res.extraction.date_document;
-    $('ttc').value = res.extraction.montant_ttc;
-    $('raison').value = res.extraction.raison_sociale;
-    window.gedId = res.gedId;
-  };
+  function fillCategories(){
+    el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
+  }
 
-  window.onload = async () => {
-    const r = await fetch('/api/admin/public');
-    const d = await r.json();
-    $('viewDossier').value = d.codeDossier || "Non configuré";
-  };
+  function fillVatForCurrentCategory(){
+    const cat = CATEGORIES.find(c => c.key === el("categorie").value);
+    const allowed = cat ? cat.vat : ["20","10","0"];
+    const current = el("tvaRate").value;
+    el("tvaRate").innerHTML = allowed.map(v => `<option value="${v}">${v}%</option>`).join("");
+    if (allowed.includes(current)) el("tvaRate").value = current;
+  }
+
+  async function loadCodeDossier(){
+    try{
+      const resp = await fetch("/api/admin/public");
+      const out = await resp.json();
+      el("codeDossierView").value = out.codeDossier || "";
+      return out.codeDossier || "";
+    }catch{
+      el("codeDossierView").value = "";
+      return "";
+    }
+  }
+
+  /** ===== Ticket auto: T0001, T0002... ===== */
+  function nextTicketNumber() {
+    const key = "ticket_counter_T";
+    const prev = Number(localStorage.getItem(key) || "0");
+    const next = prev + 1;
+    localStorage.setItem(key, String(next));
+    return "T" + String(next).padStart(4, "0");
+  }
+  function ensureTicketNumber() {
+    const v = String(el("numeroTicket").value || "").trim();
+    if (v) return v;
+    const t = nextTicketNumber();
+    el("numeroTicket").value = t;
+    return t;
+  }
+
+  /** ===== OpenCV ready ===== */
+  function waitForOpenCV(timeoutMs = 12000) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      (function poll(){
+        if (window.cv && cv.Mat) return resolve();
+        if (Date.now() - start > timeoutMs) return reject(new Error("OpenCV.js non chargé (réseau ?)"));
+        setTimeout(poll, 60);
+      })();
+    });
+  }
+
+  /** rotation EXIF auto si support */
+  async function loadImageBitmapWithOrientation(file) {
+    if (window.createImageBitmap) {
+      try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
+      catch { return await createImageBitmap(file); }
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+    URL.revokeObjectURL(url);
+    return img;
+  }
+
+  function drawBitmapToCanvas(bitmap, maxW = 2200) {
+    let w = bitmap.width, h = bitmap.height;
+    if (w > maxW) { const r = maxW / w; w = Math.round(w*r); h = Math.round(h*r); }
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    return canvas;
+  }
+
+  function orderCorners(pts) {
+    const sum = pts.map(p => p.x + p.y);
+    const diff = pts.map(p => p.x - p.y);
+    const tl = pts[sum.indexOf(Math.min(...sum))];
+    const br = pts[sum.indexOf(Math.max(...sum))];
+    const tr = pts[diff.indexOf(Math.max(...diff))];
+    const bl = pts[diff.indexOf(Math.min(...diff))];
+    return [tl, tr, br, bl];
+  }
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  /**
+   * Amélioration ombres/contraste + détection quadrilatère + warp perspective
+   * Retourne canvas "ticket bord à bord" ou fallback canvas original si non détecté.
+   */
+  function scanTicketOpenCV(srcCanvas) {
+    const src = cv.imread(srcCanvas);
+
+    const gray = new cv.Mat();
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+    // --- 1) CLAHE pour corriger ombres / contraste local ---
+    let claheOut = new cv.Mat();
+    try {
+      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
+      clahe.apply(gray, claheOut);
+      clahe.delete();
+    } catch {
+      claheOut = gray.clone(); // fallback
+    }
+
+    // --- 2) léger blur ---
+    const blur = new cv.Mat();
+    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
+
+    // --- 3) adaptive threshold (meilleur sur table claire + ombres) ---
+    const thr = new cv.Mat();
+    cv.adaptiveThreshold(
+      blur, thr, 255,
+      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      cv.THRESH_BINARY,
+      31, // block size
+      8   // C
+    );
+
+    // --- 4) inversion pour contours (optionnel mais souvent mieux) ---
+    const inv = new cv.Mat();
+    cv.bitwise_not(thr, inv);
+
+    // --- 5) morpho pour fermer les ruptures ---
+    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
+    const morphed = new cv.Mat();
+    cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel);
+
+    // --- 6) edges + contours ---
+    const edges = new cv.Mat();
+    cv.Canny(morphed, edges, 60, 180);
+
+    const contours = new cv.MatVector();
+    const hierarchy = new cv.Mat();
+    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    let best = null;
+    let bestArea = 0;
+
+    for (let i = 0; i < contours.size(); i++) {
+      const cnt = contours.get(i);
+      const peri = cv.arcLength(cnt, true);
+      const approx = new cv.Mat();
+      cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+
+      if (approx.rows === 4) {
+        const area = cv.contourArea(approx);
+        if (area > bestArea) { bestArea = area; best = approx; }
+      }
+
+      approx.delete();
+      cnt.delete();
+    }
+
+    const minArea = src.rows * src.cols * 0.18; // seuil assez strict pour éviter faux positifs
+    if (!best || bestArea < minArea) {
+      // cleanup
+      src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
+      kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
+      if (best) best.delete();
+      return srcCanvas; // fallback
+    }
+
+    // 4 points
+    const pts = [];
+    for (let i = 0; i < 4; i++) {
+      pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
+    }
+    const [tl, tr, br, bl] = orderCorners(pts);
+
+    // dimensions cible
+    const widthA = dist(br, bl);
+    const widthB = dist(tr, tl);
+    const maxWidth = Math.max(widthA, widthB);
+
+    const heightA = dist(tr, br);
+    const heightB = dist(tl, bl);
+    const maxHeight = Math.max(heightA, heightB);
+
+    let dstW = Math.max(1, Math.round(maxWidth));
+    let dstH = Math.max(1, Math.round(maxHeight));
+
+    // Limite sortie (perf)
+    const maxOutW = 2200;
+    if (dstW > maxOutW) {
+      const r = maxOutW / dstW;
+      dstW = Math.round(dstW * r);
+      dstH = Math.round(dstH * r);
+    }
+
+    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
+    ]);
+    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0, dstW-1, 0, dstW-1, dstH-1, 0, dstH-1
+    ]);
+
+    const M = cv.getPerspectiveTransform(srcTri, dstTri);
+    const warped = new cv.Mat();
+    cv.warpPerspective(src, warped, M, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
+
+    // sortie canvas
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = dstW;
+    outCanvas.height = dstH;
+    cv.imshow(outCanvas, warped);
+
+    // cleanup
+    src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
+    kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
+    best.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+
+    return outCanvas;
+  }
+
+  async function imageFileToTicketCanvas(imageFile) {
+    await waitForOpenCV();
+    const bitmap = await loadImageBitmapWithOrientation(imageFile);
+    const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
+    return scanTicketOpenCV(baseCanvas);
+  }
+
+  /** ===== JPEG + PDF minimal ===== */
+  function canvasToJpegBytes(canvas, quality = 0.86) {
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    const base64 = dataUrl.split(",")[1];
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, w: canvas.width, h: canvas.height };
+  }
+  function strToBytes(s) { return new TextEncoder().encode(s); }
+
+  function jpegToPdfBlob(jpegBytes, imgW, imgH) {
+    const pageW = 595, pageH = 842; // A4 points
+    const margin = 24;
+    const boxW = pageW - 2*margin;
+    const boxH = pageH - 2*margin;
+
+    const imgRatio = imgW / imgH;
+    let drawW = boxW;
+    let drawH = Math.round(drawW / imgRatio);
+    if (drawH > boxH) { drawH = boxH; drawW = Math.round(drawH * imgRatio); }
+    const x = Math.round((pageW - drawW) / 2);
+    const y = Math.round((pageH - drawH) / 2);
+
+    const chunks = [];
+    const objOffsets = [0];
+    let cursor = 0;
+
+    function addChunk(s) { const b = strToBytes(s); chunks.push(b); cursor += b.length; }
+    function addBin(u8) { chunks.push(u8); cursor += u8.length; }
+    function markObj() { objOffsets.push(cursor); }
+
+    addChunk("%PDF-1.4\n%âãÏÓ\n");
+
+    markObj(); addChunk("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    markObj(); addChunk("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    markObj(); addChunk(
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
+      `/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
+    );
+
+    markObj();
+    addChunk(
+      `4 0 obj\n<< /Type /XObject /Subtype /Image /Name /Im0 /Width ${imgW} /Height ${imgH} ` +
+      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`
+    );
+    addBin(jpegBytes);
+    addChunk("\nendstream\nendobj\n");
+
+    const content = `q\n${drawW} 0 0 ${drawH} ${x} ${y} cm\n/Im0 Do\nQ\n`;
+    const contentBytes = strToBytes(content);
+
+    markObj();
+    addChunk(`5 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n`);
+    addBin(contentBytes);
+    addChunk("\nendstream\nendobj\n");
+
+    const xrefPos = cursor;
+    addChunk("xref\n0 6\n0000000000 65535 f \n");
+    for (let i = 1; i <= 5; i++) addChunk(String(objOffsets[i]).padStart(10, "0") + " 00000 n \n");
+    addChunk(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+
+    return new Blob(chunks, { type: "application/pdf" });
+  }
+
+  async function imageFileToPdfBlob(imageFile) {
+    const canvas = await imageFileToTicketCanvas(imageFile);
+    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.86);
+    return jpegToPdfBlob(bytes, w, h);
+  }
+
+  /** ===== UI ===== */
+  if (isAdmin) {
+    el("pageTitle").textContent = "Admin";
+    el("adminBlock").classList.remove("hidden");
+
+    el("saveAdmin").addEventListener("click", async () => {
+      el("adminErr").textContent = "";
+      el("adminOk").textContent = "";
+
+      const payload = {
+        baseUrl: el("baseUrl").value.trim(),
+        identifiant: el("identifiant").value.trim(),
+        motdepasse: el("motdepasse").value,
+        codeDossier: el("codeDossier").value.trim()
+      };
+
+      try {
+        const resp = await fetch("/api/admin/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const out = await resp.json();
+        if (!resp.ok) throw new Error(out.error || "Erreur");
+        el("adminOk").textContent = "OK — enregistré.";
+      } catch (e) {
+        el("adminErr").textContent = String(e.message || e);
+      }
+    });
+
+    el("openDossier").addEventListener("click", async () => {
+      el("adminErr").textContent = "";
+      el("adminOk").textContent = "";
+
+      const codeDossier = el("codeDossier").value.trim();
+      if (!codeDossier) { el("adminErr").textContent = "Code dossier obligatoire."; return; }
+
+      try {
+        const resp = await fetch("/api/cnx/session-dossier", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codeDossier })
+        });
+        const out = await resp.json();
+        if (!resp.ok) throw new Error(out.error || "Erreur");
+        el("adminOk").textContent = "OK — dossier ouvert.";
+      } catch (e) {
+        el("adminErr").textContent = String(e.message || e);
+      }
+    });
+
+  } else {
+    el("userBlock").classList.remove("hidden");
+    if (isDebug) el("debugCard").classList.remove("hidden");
+
+    fillCategories();
+    fillVatForCurrentCategory();
+    el("categorie").addEventListener("change", () => fillVatForCurrentCategory());
+
+    (async () => {
+      const cd = await loadCodeDossier();
+      if (!cd) el("gedErr").textContent = "Code dossier non configuré. Va sur /?admin=1.";
+    })();
+
+    el("uploadGed").addEventListener("click", async () => {
+      el("gedErr").textContent = "";
+      el("gedOk").textContent = "";
+      el("err").textContent = "";
+      el("ok").textContent = "";
+      if (isDebug) el("debugOut").value = "";
+
+      const codeDossier = (el("codeDossierView").value || "").trim();
+      if (!codeDossier) {
+        el("gedErr").textContent = "Upload bloqué : code dossier manquant. Va sur /?admin=1.";
+        return;
+      }
+
+      const file = el("fileInput").files[0];
+      if (!file) { el("gedErr").textContent = "Choisis un PDF ou prends une photo."; return; }
+
+      let pdfBlob = null;
+      let filename = "ticket.pdf";
+
+      try {
+        const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
+        const isImg = (file.type || "").startsWith("image/");
+
+        if (isPdf) {
+          pdfBlob = file;
+          filename = file.name || "ticket.pdf";
+        } else if (isImg) {
+          pdfBlob = await imageFileToPdfBlob(file);
+          filename = "photo_ticket.pdf";
+        } else {
+          throw new Error("Format non supporté. Utilise PDF ou image.");
+        }
+
+        const form = new FormData();
+        form.append("pdf", pdfBlob, filename);
+
+        const resp = await fetch("/api/ged/upload", { method: "POST", body: form });
+        const out = await resp.json();
+        if (!resp.ok) throw new Error(out.error || "Erreur upload/OCR");
+
+        el("referenceGedId").value = out.gedId;
+        el("gedOk").textContent = "OK — Upload GED + OCR terminé. Id GED = " + out.gedId;
+
+        const ex = out.extraction || {};
+        if (ex.date_document) el("dateTicket").value = ex.date_document;
+        if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
+
+        if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
+        else ensureTicketNumber();
+
+        if (typeof ex.montant_ttc === "number") el("ttc").value = String(ex.montant_ttc).replace(".", ",");
+        if (typeof ex.montant_ht === "number") el("ht").value = String(ex.montant_ht).replace(".", ",");
+        if (typeof ex.montant_tva === "number") el("tvaMontant").value = String(ex.montant_tva).replace(".", ",");
+
+        const sug = out.suggestion || {};
+        if (sug.categorie_ui) setSelect(el("categorie"), sug.categorie_ui);
+        fillVatForCurrentCategory();
+        if (sug.tva_rate) setSelect(el("tvaRate"), sug.tva_rate);
+        if (sug.compteF) setSelect(el("compteFournisseur"), sug.compteF);
+
+        if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
+
+      } catch (e) {
+        el("gedErr").textContent = String(e.message || e);
+      }
+    });
+
+    el("submit").addEventListener("click", async () => {
+      el("err").textContent = "";
+      el("ok").textContent = "";
+      if (isDebug) el("debugOut").value = "";
+
+      const referenceGedId = (el("referenceGedId").value || "").trim();
+      if (!referenceGedId) { el("err").textContent = "Uploade d'abord le PDF (Id GED requis)."; return; }
+
+      const numeroTicket = ensureTicketNumber();
+
+      const meta = {
+        journal: (el("journal").value || "").trim(),
+        compteFournisseur: el("compteFournisseur").value,
+        referenceGedId,
+        categorie_ui: el("categorie").value,
+        tva_rate: el("tvaRate").value,
+        date_ticket: (el("dateTicket").value || "").trim(),
+        numero_ticket: numeroTicket,
+        raison_sociale: (el("raisonSociale").value || "").trim(),
+        montant_ttc: toNumOrNull(el("ttc").value),
+        ht: toNumOrNull(el("ht").value),
+        tva_montant: toNumOrNull(el("tvaMontant").value)
+      };
+
+      const form = new FormData();
+      form.append("meta", JSON.stringify(meta));
+
+      try {
+        const resp = await fetch("/api/receipts/submit", { method: "POST", body: form });
+        const out = await resp.json();
+        if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
+
+        el("ok").textContent = "OK — écriture envoyée.";
+        if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
+      } catch (e) {
+        el("err").textContent = String(e.message || e);
+      }
+    });
+  }
 </script>
 </body>
 </html>
