@@ -5,86 +5,83 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tikeo - Gestion des frais</title>
   <style>
-    body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#222}
-    .container{max-width:980px;margin:40px auto;padding:20px}
-    .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
-    label{display:block;margin-bottom:12px;font-size:14px}
-    input,select,textarea{width:100%;padding:8px;margin-top:4px;border-radius:4px;border:1px solid #ccc;font-size:14px}
-    .row{display:flex;gap:20px}
+    body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:#f5f6f8;color:#222}
+    .container{max-width:800px;margin:20px auto;padding:15px}
+    .card{background:#fff;padding:20px;margin-bottom:20px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,.08)}
+    h3{margin-top:0;color:#007bff;border-bottom:1px solid #eee;padding-bottom:10px}
+    label{display:block;margin-bottom:12px;font-size:14px;font-weight:600}
+    input,select{width:100%;padding:10px;margin-top:5px;border-radius:6px;border:1px solid #ccc;box-sizing:border-box}
+    .row{display:flex;gap:15px;margin-bottom:15px}
     .row>div{flex:1}
-    button{padding:10px 16px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold}
+    button{padding:12px 18px;background:#007bff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;transition:0.2s}
     button:hover{background:#0056b3}
+    button:disabled{background:#ccc;cursor:not-allowed}
     button.secondary{background:#6c757d}
     button.ok{background:#28a745}
-    .error{color:#c00;margin-top:10px;font-size:13px;white-space:pre-wrap}
-    .success{color:#0a7a2a;margin-top:10px;font-size:13px;white-space:pre-wrap}
+    .error{color:#c00;padding:10px;font-size:13px;background:#fff1f1;border-radius:6px;margin:10px 0}
+    .success{color:#0a7a2a;padding:10px;font-size:13px;background:#f1fff4;border-radius:6px;margin:10px 0}
     .hidden{display:none}
-    .previewWrap{display:flex;flex-direction:column;align-items:center;gap:16px}
-    .previewBox{border:1px solid #ddd;border-radius:8px;padding:10px;background:#fafafa;width:100%;max-width:500px;position:relative}
-    video, canvas { width: 100%; height: auto; border-radius: 6px; background: #000; }
-    #overlay { position: absolute; top: 10px; left: 10px; width: calc(100% - 20px); pointer-events: none; }
-    .btnRow{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .previewBox{position:relative;background:#000;border-radius:8px;overflow:hidden;margin-top:10px}
+    video, canvas { width: 100%; display: block; }
+    #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+    #statusPill{position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.6);color:#fff;padding:4px 10px;border-radius:20px;font-size:12px}
+    .source-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
   </style>
 </head>
 <body>
 <div class="container">
-  <center><img src="http://www.image-heberg.fr/files/17719392581052590924.png" alt="logo.png" style="max-width:150px"/></center>
-  <h1 id="pageTitle">Tikeo - Gestion des frais</h1>
-
+  <center><img src="http://www.image-heberg.fr/files/17719392581052590924.png" alt="logo" style="max-width:120px;margin-bottom:10px"/></center>
+  
   <div id="adminBlock" class="card hidden">
-    <h3>Configuration Admin</h3>
-    <label>URL API <input id="baseUrl" placeholder="https://isuiteacd.suiteexpert.fr/cnx/api"></label>
+    <h3>⚙️ Configuration Admin</h3>
+    <label>URL API <input id="baseUrl" placeholder="https://..."></label>
     <div class="row">
       <div><label>Identifiant <input id="identifiant"></label></div>
       <div><label>Mot de passe <input id="motdepasse" type="password"></label></div>
     </div>
     <label>Code dossier <input id="codeDossier" placeholder="DA_CONSEIL"></label>
-    <div class="btnRow">
-      <button id="saveAdmin">Enregistrer Config</button>
-      <button id="openDossier" class="ok">Ouvrir Session Dossier</button>
+    <div style="display:flex;gap:10px">
+        <button id="saveAdmin">Enregistrer</button>
+        <button id="openDossier" class="ok">Ouvrir Session</button>
     </div>
-    <div id="adminErr" class="error"></div>
-    <div id="adminOk" class="success"></div>
+    <div id="adminErr" class="error hidden"></div>
+    <div id="adminOk" class="success hidden"></div>
   </div>
 
-  <div id="userBlock" class="hidden">
+  <div id="userBlock">
     <div class="card">
-      <h3>1️⃣ Capture du ticket</h3>
-      <label>Dossier actif <input id="codeDossierView" readonly style="background:#eee"></label>
+      <h3>1️⃣ Choix du document</h3>
+      <label>Dossier en cours : <input id="codeDossierView" readonly style="background:#f9f9f9;border:none;color:#555"></label>
       
-      <div class="btnRow">
-        <button id="startCam">Scanner un ticket</button>
-        <button id="stopCam" class="secondary" disabled>Annuler</button>
-        <input type="file" id="fileInput" accept="application/pdf" style="display:none">
-        <button onclick="document.getElementById('fileInput').click()" class="secondary">Importer PDF</button>
+      <div class="source-grid">
+        <button id="btnShowCam">📸 Prendre en photo</button>
+        <button id="btnShowFile" class="secondary">📁 Importer un PDF</button>
       </div>
+      <input type="file" id="fileInput" accept="application/pdf" class="hidden">
 
-      <div id="camPanel" class="previewWrap hidden" style="margin-top:20px">
+      <div id="camPanel" class="hidden">
         <div class="previewBox">
           <video id="cam" playsinline muted></video>
           <canvas id="overlay"></canvas>
-          <div id="camStatus" style="text-align:center; font-weight:bold; color:#007bff; margin-top:5px">Initialisation caméra...</div>
+          <div id="statusPill">Prêt</div>
         </div>
+        <button id="stopCam" class="secondary" style="width:100%;margin-top:10px">Fermer la caméra</button>
       </div>
 
-      <div id="scanPanel" class="previewWrap hidden" style="margin-top:20px">
-        <div class="previewBox">
-          <div class="small"><b>Ticket détecté (fond supprimé)</b></div>
-          <canvas id="scanCanvas"></canvas>
-          <div class="btnRow">
-            <button id="clearScanBtn" class="secondary">Reprendre</button>
-            <button id="uploadGed" class="ok">Envoyer en GED + OCR</button>
-          </div>
+      <div id="resultPanel" class="hidden" style="margin-top:20px">
+        <div style="text-align:center;background:#eee;padding:10px;border-radius:8px">
+            <span id="docTypeLabel" style="font-weight:bold">Document prêt</span>
+            <canvas id="scanCanvas" class="hidden" style="max-height:300px;object-fit:contain;margin-top:10px"></canvas>
         </div>
+        <button id="uploadGed" class="ok" style="width:100%;margin-top:15px;font-size:1.1em">🚀 Envoyer en GED & OCR</button>
       </div>
 
-      <div id="gedErr" class="error"></div>
-      <div id="gedOk" class="success"></div>
-      <label style="margin-top:15px">ID GED Document <input id="referenceGedId" readonly></label>
+      <div id="gedErr" class="error hidden"></div>
+      <div id="gedOk" class="success hidden"></div>
     </div>
 
     <div class="card">
-      <h3>2️⃣ Comptabilisation</h3>
+      <h3>2️⃣ Validation des données</h3>
       <div class="row">
         <div><label>Journal <input id="journal" value="AC"></label></div>
         <div><label>Fournisseur
@@ -101,170 +98,172 @@
       </div>
       <div class="row">
         <div><label>Date <input id="dateTicket" type="date"></label></div>
-        <div><label>N° Ticket <input id="numeroTicket"></label></div>
+        <div><label>Montant TTC <input id="ttc" inputmode="decimal" placeholder="0.00"></label></div>
       </div>
-      <label>Raison sociale <input id="raisonSociale"></label>
-      <div class="row">
-        <div><label>Montant TTC <input id="ttc" inputmode="decimal"></label></div>
-        <div><label>Montant HT <input id="ht" inputmode="decimal"></label></div>
-      </div>
-      <button id="submit" class="ok" style="width:100%; margin-top:10px">Publier l'écriture</button>
-      <div id="err" class="error"></div>
-      <div id="ok" class="success"></div>
+      <label>Raison sociale <input id="raisonSociale" placeholder="Ex: Restaurant Le Paris"></label>
+      <button id="submit" class="ok" style="width:100%;margin-top:10px">✅ Publier l'écriture</button>
+      <div id="finalStatus"></div>
     </div>
   </div>
 </div>
 
-<script src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
-<script src="https://unpkg.com/jscanify@1.2.0/dist/jscanify.min.js" type="text/javascript"></script>
+<script>
+  // On charge OpenCV de manière asynchrone pour ne pas bloquer le rendu
+  var scriptOpenCV = document.createElement('script');
+  scriptOpenCV.src = "https://docs.opencv.org/4.x/opencv.js";
+  scriptOpenCV.async = true;
+  document.head.appendChild(scriptOpenCV);
+
+  var scriptJscan = document.createElement('script');
+  scriptJscan.src = "https://unpkg.com/jscanify@1.2.0/dist/jscanify.min.js";
+  scriptJscan.defer = true;
+  document.head.appendChild(scriptJscan);
+</script>
 
 <script>
   const el = (id) => document.getElementById(id);
   const qs = new URLSearchParams(location.search);
-  const isAdminMode = qs.get("admin") === "1";
-
-  const CATEGORIES = [
-    { key: "repas_pro", label: "Repas pro", vat: ["10", "20", "0"] },
-    { key: "carburant", label: "Carburant", vat: ["20"] },
-    { key: "divers", label: "Divers", vat: ["20", "10", "5.5", "0"] }
-  ];
-
+  
   let scanner = null;
   let camStream = null;
   let loopTimer = null;
-  let pendingPdfBlob = null;
+  let pendingDoc = null; // Contiendra le Blob (image rognée ou PDF original)
   let stabilityCounter = 0;
 
-  window.onload = async () => {
-    if (isAdminMode) {
+  // INITIALISATION
+  window.onload = () => {
+    if (qs.get("admin") === "1") {
       el("adminBlock").classList.remove("hidden");
-      el("pageTitle").textContent = "Administration Tikeo";
-      initAdminActions();
-    } else {
-      el("userBlock").classList.remove("hidden");
-      fillCategories();
-      await loadCodeDossier();
+      initAdminLogic();
     }
+    fillCategories();
+    loadPublicConfig();
   };
 
-  // --- LOGIQUE ADMIN ---
-  function initAdminActions() {
+  function initAdminLogic() {
     el("saveAdmin").onclick = async () => {
-      const payload = {
-        baseUrl: el("baseUrl").value.trim(),
-        identifiant: el("identifiant").value.trim(),
-        motdepasse: el("motdepasse").value,
-        codeDossier: el("codeDossier").value.trim()
-      };
-      try {
-        const r = await fetch("/api/admin/config", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        if (r.ok) el("adminOk").textContent = "Configuration enregistrée.";
-      } catch (e) { el("adminErr").textContent = "Erreur de sauvegarde."; }
+        const data = { baseUrl: el("baseUrl").value, identifiant: el("identifiant").value, motdepasse: el("motdepasse").value, codeDossier: el("codeDossier").value };
+        await fetch("/api/admin/config", { method: "POST", headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+        el("adminOk").classList.remove("hidden");
     };
-
     el("openDossier").onclick = async () => {
-      const codeDossier = el("codeDossier").value.trim();
-      try {
-        const r = await fetch("/api/cnx/session-dossier", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ codeDossier })
-        });
-        if (r.ok) el("adminOk").textContent = "Session ouverte pour " + codeDossier;
-      } catch (e) { el("adminErr").textContent = "Erreur ouverture session."; }
+        await fetch("/api/cnx/session-dossier", { method: "POST", headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ codeDossier: el("codeDossier").value }) });
+        el("adminOk").textContent = "Session Active !";
+        el("adminOk").classList.remove("hidden");
     };
   }
 
-  // --- LOGIQUE SCANNER ---
-  async function startCam() {
-    if (typeof jscanify === 'undefined') {
-        alert("Les modules de scan sont encore en cours de chargement...");
-        return;
-    }
-    
+  async function loadPublicConfig() {
+    try {
+        const r = await fetch("/api/admin/public");
+        const d = await r.json();
+        el("codeDossierView").value = d.codeDossier || "Non configuré";
+    } catch(e) {}
+  }
+
+  // --- LOGIQUE PHOTO (ROGNAGE AUTO) ---
+  el("btnShowCam").onclick = async () => {
+    if (typeof jscanify === 'undefined') return alert("Chargement des outils de scan... réessayez dans 2 sec.");
     el("camPanel").classList.remove("hidden");
-    el("scanPanel").classList.add("hidden");
-    el("startCam").disabled = true;
-    el("stopCam").disabled = false;
-    
+    el("resultPanel").classList.add("hidden");
     scanner = new jscanify();
     
-    try {
-      camStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 } }
-      });
-      const video = el("cam");
-      video.srcObject = camStream;
-      await video.play();
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    const video = el("cam");
+    video.srcObject = camStream;
+    video.play();
 
-      const overlay = el("overlay");
-      const ctx = overlay.getContext("2d");
-      overlay.width = video.videoWidth;
-      overlay.height = video.videoHeight;
+    const overlay = el("overlay");
+    const ctx = overlay.getContext("2d");
+    
+    video.onloadedmetadata = () => {
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+        loopTimer = setInterval(() => {
+            ctx.drawImage(video, 0, 0);
+            const mat = cv.imread(video);
+            const contour = scanner.findPaperContour(mat);
+            if (contour) {
+                scanner.highlightPaper(overlay, { thickness: 5, color: '#00ff00' });
+                stabilityCounter++;
+                el("statusPill").textContent = `Analyse... ${stabilityCounter}/10`;
+                if (stabilityCounter >= 10) processCapture(video, contour);
+            } else {
+                stabilityCounter = 0;
+                el("statusPill").textContent = "Alignez le ticket";
+            }
+            mat.delete();
+        }, 100);
+    };
+  };
 
-      loopTimer = setInterval(() => {
-        ctx.drawImage(video, 0, 0);
-        const mat = cv.imread(video);
-        const contour = scanner.findPaperContour(mat);
-
-        if (contour) {
-          scanner.highlightPaper(overlay, { thickness: 5, color: '#00ff00' });
-          stabilityCounter++;
-          el("camStatus").textContent = `Détection... (${stabilityCounter}/8)`;
-          if (stabilityCounter >= 8) captureTicket(video, contour);
-        } else {
-          stabilityCounter = 0;
-          el("camStatus").textContent = "Placez le ticket sur un fond contrasté";
-          ctx.clearRect(0, 0, overlay.width, overlay.height);
-        }
-        mat.delete();
-      }, 100);
-    } catch (err) { stopCam(); }
-  }
-
-  function captureTicket(video, contour) {
+  function processCapture(video, contour) {
     clearInterval(loopTimer);
-    // On extrait uniquement le ticket et on redresse la perspective
     const resultCanvas = scanner.extractPaper(video, 800, 1100, contour);
     const dst = el("scanCanvas");
     dst.width = resultCanvas.width;
     dst.height = resultCanvas.height;
     dst.getContext("2d").drawImage(resultCanvas, 0, 0);
-
-    pendingPdfBlob = canvasToBlob(dst);
-    el("scanPanel").classList.remove("hidden");
-    stopCam();
+    
+    dst.classList.remove("hidden");
+    el("docTypeLabel").textContent = "📸 Photo (Ticket isolé)";
+    
+    // Conversion en Blob pour envoi
+    resultCanvas.toBlob((blob) => { pendingDoc = blob; }, 'image/jpeg', 0.9);
+    
+    el("resultPanel").classList.remove("hidden");
+    closeCam();
   }
 
-  function canvasToBlob(canvas) {
-    const data = canvas.toDataURL("image/jpeg", 0.9);
-    const bin = atob(data.split(',')[1]);
-    const array = [];
-    for(let i = 0; i < bin.length; i++) array.push(bin.charCodeAt(i));
-    return new Blob([new Uint8Array(array)], {type: 'image/jpeg'});
-  }
-
-  function stopCam() {
+  function closeCam() {
     if (loopTimer) clearInterval(loopTimer);
     if (camStream) camStream.getTracks().forEach(t => t.stop());
     el("camPanel").classList.add("hidden");
-    el("startCam").disabled = false;
-    el("stopCam").disabled = true;
   }
+  el("stopCam").onclick = closeCam;
 
-  // --- UTILS ---
-  async function loadCodeDossier() {
+  // --- LOGIQUE IMPORT PDF ---
+  el("btnShowFile").onclick = () => el("fileInput").click();
+  el("fileInput").onchange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        pendingDoc = file;
+        el("docTypeLabel").textContent = "📁 PDF : " + file.name;
+        el("scanCanvas").classList.add("hidden");
+        el("resultPanel").classList.remove("hidden");
+    }
+  };
+
+  // --- ENVOI GED + OCR ---
+  el("uploadGed").onclick = async () => {
+    if (!pendingDoc) return;
+    el("gedOk").textContent = "⏳ Transfert et analyse OCR...";
+    el("gedOk").classList.remove("hidden");
+    el("gedErr").classList.add("hidden");
+
+    const fd = new FormData();
+    fd.append("pdf", pendingDoc, pendingDoc.name || "ticket.jpg");
+
     try {
-      const r = await fetch("/api/admin/public");
-      const d = await r.json();
-      el("codeDossierView").value = d.codeDossier || "NON CONFIGURÉ";
-    } catch(e) {}
-  }
+        const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
+        const res = await r.json();
+        if(!r.ok) throw res;
 
+        el("gedOk").textContent = "✅ Document analysé !";
+        // Remplissage automatique
+        const ex = res.extraction || {};
+        if (ex.date_document) el("dateTicket").value = ex.date_document;
+        if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
+        if (ex.montant_ttc) el("ttc").value = ex.montant_ttc;
+        
+        window.gedId = res.gedId; // Stockage temporaire
+    } catch (e) {
+        el("gedErr").textContent = "Erreur : " + (e.error || "Problème réseau");
+        el("gedErr").classList.remove("hidden");
+    }
+  };
+
+  // --- COMPOSTAGE ---
   function fillCategories() {
     el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
     el("categorie").onchange = () => {
@@ -274,31 +273,15 @@
     el("categorie").dispatchEvent(new Event('change'));
   }
 
-  el("startCam").onclick = startCam;
-  el("stopCam").onclick = stopCam;
-  el("clearScanBtn").onclick = () => { el("scanPanel").classList.add("hidden"); startCam(); };
+  const CATEGORIES = [
+    { key: "repas", label: "Repas", vat: ["10", "20", "0"] },
+    { key: "carbu", label: "Carburant", vat: ["20"] },
+    { key: "divers", label: "Divers", vat: ["20", "10", "5.5"] }
+  ];
 
-  el("uploadGed").onclick = async () => {
-    if (!pendingPdfBlob) return;
-    el("gedOk").textContent = "Analyse en cours...";
-    const fd = new FormData();
-    fd.append("pdf", pendingPdfBlob, "ticket.jpg");
-    try {
-      const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
-      const res = await r.json();
-      el("referenceGedId").value = res.gedId;
-      el("gedOk").textContent = "Upload réussi.";
-      if(res.extraction) {
-          if(res.extraction.date_document) el("dateTicket").value = res.extraction.date_document;
-          if(res.extraction.raison_sociale) el("raisonSociale").value = res.extraction.raison_sociale;
-          if(res.extraction.montant_ttc) el("ttc").value = res.extraction.montant_ttc;
-      }
-    } catch (e) { el("gedErr").textContent = "Erreur upload."; }
-  };
-
-  el("submit").onclick = async () => {
-      // Logique d'envoi final
-      el("ok").textContent = "Écriture envoyée !";
+  el("submit").onclick = () => {
+      if(!window.gedId) return alert("Veuillez d'abord envoyer le doc en GED.");
+      el("ok").textContent = "Écriture comptabilisée avec succès !";
   };
 </script>
 </body>
