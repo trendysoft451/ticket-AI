@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Frais — GED + OCR</title>
+  <title>Tikeo</title>
   <style>
     body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#222}
     .container{max-width:980px;margin:40px auto;padding:20px}
@@ -34,7 +34,7 @@
 </head>
 <body>
 <div class="container">
-  <h1 id="pageTitle">Gestion des frais</h1>
+  <h1 id="pageTitle">Tikeo - Gestion des frais</h1>
 
   <!-- ADMIN -->
   <div id="adminBlock" class="card hidden">
@@ -76,7 +76,7 @@
     <p>Choisis un PDF, ou scanne en live avec auto-capture (10 fps). Ensuite GED + OCR puis envoi écriture.</p>
 
     <div class="card">
-      <h3>1️⃣ Scan + Upload GED + OCR</h3>
+      <h3>1️⃣ Scannez ou choisir le ticket</h3>
 
       <label>Code dossier (admin)
         <input id="codeDossierView" readonly>
@@ -89,12 +89,11 @@
           </label>
         </div>
         <div>
-          <label>Ou scanner avec la caméra (auto-capture)
+          <label>Scanner le document.
             <div class="btnRow">
-              <button id="startCam">Démarrer caméra</button>
+              <button id="startCam">Démarrer le scan</button>
               <button id="stopCam" class="secondary" disabled>Stop</button>
             </div>
-            <div class="hint">Réglage auto : 1280×720, traitement ~10 fps.</div>
           </label>
         </div>
       </div>
@@ -111,7 +110,7 @@
         </div>
 
         <div class="previewBox">
-          <div class="small"><b>Overlay détection</b></div>
+          <div class="small"><b>Détection ticket</b></div>
           <canvas id="overlay"></canvas>
           <div id="camStatus" class="small"></div>
           <div id="camErr" class="error"></div>
@@ -121,19 +120,18 @@
       <!-- PREVIEW (scanned result) -->
       <div id="scanPanel" class="previewWrap hidden">
         <div class="previewBox">
-          <div class="small"><b>Aperçu final (ticket extrait)</b></div>
+          <div class="small"><b>Aperçu ticket</b></div>
           <canvas id="scanCanvas"></canvas>
           <div class="small" id="scanMeta"></div>
         </div>
 
         <div class="previewBox" style="min-width:260px">
-          <div class="small"><b>Actions</b></div>
           <div class="btnRow" style="margin-top:10px">
             <button id="clearScanBtn" class="secondary">Annuler</button>
-            <button id="uploadGed" class="ok">Envoyer GED + OCR</button>
+            <button id="uploadGed" class="ok">Envoyer le ticket </button>
           </div>
           <div class="hint" style="margin-top:10px">
-            Auto-capture : quand le ticket est stable (cadre OK) → capture + recadrage → aperçu.
+            Auto-capture : aperçu
           </div>
           <div id="scanErr" class="error"></div>
           <div id="scanOk" class="success"></div>
@@ -143,13 +141,13 @@
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
 
-      <label>ID GED (référence)
+      <label>Référence doument dans la GED (à titre d'information)
         <input id="referenceGedId" readonly>
       </label>
     </div>
 
     <div class="card">
-      <h3>2️⃣ Écriture</h3>
+      <h3>2️⃣ Publication des écritures en comptabilité</h3>
 
       <div class="row">
         <div>
@@ -158,7 +156,7 @@
           </label>
         </div>
         <div>
-          <label>Compte fournisseur (F...)
+          <label>Fournisseur
             <select id="compteFournisseur">
               <option value="FREPAS">FREPAS</option>
               <option value="FCARBU">FCARBU</option>
@@ -172,7 +170,7 @@
 
       <div class="row">
         <div>
-          <label>Catégorie (HT)
+          <label>Catégorie charges
             <select id="categorie"></select>
           </label>
         </div>
@@ -196,7 +194,7 @@
         </div>
       </div>
 
-      <label>Raison sociale (libellé)
+      <label>Raison sociale
         <input id="raisonSociale" placeholder="ex: L'ATELIER DE LA PAIX">
       </label>
 
