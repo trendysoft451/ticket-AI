@@ -98,6 +98,7 @@
       margin-top: 15px;
       font-size: 0.85rem;
       font-weight: 500;
+      white-space: pre-wrap;
     }
     .error { background: #fee2e2; color: var(--error); border: 1px solid #fecaca; }
     .success { background: #ecfdf5; color: var(--success); border: 1px solid #d1fae5; }
@@ -120,7 +121,7 @@
   <h1 id="pageTitle">Tikeo - Frais</h1>
 
   <div id="adminBlock" class="card hidden">
-    <h3>⚙️ Admin</h3>
+    <h3>⚙️ Configuration Admin</h3>
     <label>CNX URL <input id="baseUrl" placeholder="https://..."></label>
     <div class="row">
       <div><label>ID <input id="identifiant"></label></div>
@@ -137,17 +138,17 @@
 
   <div id="userBlock" class="hidden">
     <div class="card">
-      <h3>1️⃣ Ticket</h3>
-      <label>Code Dossier: <input id="codeDossierView" readonly style="border:none; width:auto; font-weight:bold;"></label>
+      <h3>1️⃣ Justificatif</h3>
+      <label>Dossier : <input id="codeDossierView" readonly style="border:none; width:auto; font-weight:bold;"></label>
       <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
-      <button id="uploadGed">Envoyer & Analyser</button>
+      <button id="uploadGed">Envoyer le ticket</button>
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
       <input id="referenceGedId" type="hidden">
     </div>
 
     <div class="card">
-      <h3>2️⃣ Écriture</h3>
+      <h3>2️⃣ Comptabilité</h3>
       <div class="row">
         <div><label>Journal <input id="journal" value="AC"></label></div>
         <div><label>Fournisseur
@@ -161,20 +162,20 @@
         </label></div>
       </div>
       <div class="row">
-        <div><label>Catégorie <select id="categorie"></select></label></div>
-        <div><label>TVA (%) <select id="tvaRate"></select></label></div>
+        <div><label>Catégorie <select id="categorie_ui"></select></label></div>
+        <div><label>TVA (%) <select id="tva_rate"></select></label></div>
       </div>
       <div class="row">
-        <div><label>Date <input id="dateTicket" type="date"></label></div>
-        <div><label>N° Ticket <input id="numeroTicket"></label></div>
+        <div><label>Date <input id="date_ticket" type="date"></label></div>
+        <div><label>N° Ticket <input id="numero_ticket"></label></div>
       </div>
-      <label>Libellé <input id="raisonSociale"></label>
+      <label>Libellé <input id="raison_sociale"></label>
       <div class="row">
-        <div><label>TTC <input id="ttc" inputmode="decimal"></label></div>
+        <div><label>TTC <input id="montant_ttc" inputmode="decimal"></label></div>
         <div><label>HT <input id="ht" inputmode="decimal"></label></div>
       </div>
-      <label>TVA <input id="tvaMontant" inputmode="decimal"></label>
-      <button id="submit" class="btn-success">Envoyer en Comptabilité</button>
+      <label>TVA <input id="tva_montant" inputmode="decimal"></label>
+      <button id="submitBtn" class="btn-success">Valider l'écriture</button>
       <div id="err" class="error"></div>
       <div id="ok" class="success"></div>
     </div>
@@ -183,13 +184,12 @@
 
 <a href="?admin=1" id="adminTrigger">⚙️</a>
 
-<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
-
 <script>
   const el = (id) => document.getElementById(id);
   const qs = new URLSearchParams(location.search);
   const isAdmin = qs.get("admin") === "1";
 
+  // Affichage des blocs
   if (isAdmin) { el("adminBlock").classList.remove("hidden"); el("adminTrigger").classList.add("hidden"); }
   else { el("userBlock").classList.remove("hidden"); }
 
@@ -203,124 +203,115 @@
     { key: "parking", label: "Parking", vat: ["20"] }
   ];
 
-  function fillCategories(){ el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join(""); }
+  function fillCategories(){ el("categorie_ui").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join(""); }
   function fillVat(){
-    const cat = CATEGORIES.find(c => c.key === el("categorie").value);
+    const cat = CATEGORIES.find(c => c.key === el("categorie_ui").value);
     const allowed = cat ? cat.vat : ["20","10","0"];
-    el("tvaRate").innerHTML = allowed.map(v => `<option value="${v}">${v}%</option>`).join("");
+    el("tva_rate").innerHTML = allowed.map(v => `<option value="${v}">${v}%</option>`).join("");
   }
-  el("categorie").onchange = fillVat;
+  el("categorie_ui").onchange = fillVat;
 
   async function loadConfig(){
-    const r = await fetch("/api/admin/public");
-    const out = await r.json();
-    el("codeDossierView").value = out.codeDossier || "";
-  }
-
-  // Conversion Image -> PDF pour la GED
-  async function imageToPdfBlob(file) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      img.onload = () => {
-        const c = document.createElement("canvas");
-        c.width = img.width; c.height = img.height;
-        c.getContext("2d").drawImage(img, 0, 0);
-        c.toBlob(async (imgBlob) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const bytes = new Uint8Array(reader.result);
-            const chunks = [
-              new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n4 0 obj\n<< /Type /XObject /Subtype /Image /Width "+img.width+" /Height "+img.height+" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+bytes.length+" >>\nstream\n"),
-              bytes,
-              new TextEncoder().encode("\nendstream\nendobj\n5 0 obj\n<< /Length 44 >>\nstream\nq 595 0 0 842 0 0 cm /Im0 Do Q\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n500\n%%EOF")
-            ];
-            resolve(new Blob(chunks, { type: "application/pdf" }));
-          };
-          reader.readAsArrayBuffer(imgBlob);
-        }, "image/jpeg", 0.8);
-      };
-    });
-  }
-
-  // --- ACTIONS ---
-
-  el("uploadGed").onclick = async () => {
-    el("gedErr").textContent = ""; el("gedOk").textContent = "Analyse...";
-    const file = el("fileInput").files[0];
-    if (!file) return el("gedErr").textContent = "Fichier manquant.";
-    
     try {
-      const blob = file.type.includes("image") ? await imageToPdfBlob(file) : file;
-      const fd = new FormData();
-      fd.append("pdf", blob, "ticket.pdf");
+        const r = await fetch("/api/admin/public");
+        const out = await r.json();
+        el("codeDossierView").value = out.codeDossier || "Non configuré";
+    } catch(e) {}
+  }
 
-      const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
+  // --- ACTION 1 : UPLOAD GED ---
+  el("uploadGed").onclick = async () => {
+    el("gedErr").textContent = ""; el("gedOk").textContent = "Analyse en cours...";
+    const file = el("fileInput").files[0];
+    if (!file) { el("gedErr").textContent = "Sélectionnez un fichier."; return; }
+    
+    const formData = new FormData();
+    formData.append("pdf", file);
+
+    try {
+      const r = await fetch("/api/ged/upload", { method: "POST", body: formData });
       const out = await r.json();
-      if (!r.ok) throw new Error(out.error);
+      if (!r.ok) throw new Error(out.error || "Erreur lors de l'analyse");
 
       el("referenceGedId").value = out.gedId;
-      el("gedOk").textContent = "Analyse réussie !";
+      el("gedOk").textContent = "Ticket chargé (ID: " + out.gedId + ")";
       
       const ex = out.extraction;
-      el("dateTicket").value = ex.date_document || "";
-      el("raisonSociale").value = ex.raison_sociale || "";
-      el("numeroTicket").value = ex.numero_ticket || "T" + Date.now().toString().slice(-4);
-      el("ttc").value = String(ex.montant_ttc || "").replace(".", ",");
+      el("date_ticket").value = ex.date_document || "";
+      el("raison_sociale").value = ex.raison_sociale || "";
+      el("numero_ticket").value = ex.numero_ticket || "T" + Date.now().toString().slice(-4);
+      el("montant_ttc").value = String(ex.montant_ttc || "").replace(".", ",");
       el("ht").value = String(ex.montant_ht || "").replace(".", ",");
-      el("tvaMontant").value = String(ex.montant_tva || "").replace(".", ",");
+      el("tva_montant").value = String(ex.montant_tva || "").replace(".", ",");
       
-      if(out.suggestion.categorie_ui) el("categorie").value = out.suggestion.categorie_ui;
+      if(out.suggestion.categorie_ui) el("categorie_ui").value = out.suggestion.categorie_ui;
       fillVat();
-      if(out.suggestion.tva_rate) el("tvaRate").value = out.suggestion.tva_rate;
-    } catch (e) { el("gedErr").textContent = e.message; }
+      if(out.suggestion.tva_rate) el("tva_rate").value = out.suggestion.tva_rate;
+    } catch (e) { 
+        el("gedErr").textContent = e.message; 
+        el("gedOk").textContent = "";
+    }
   };
 
-  el("submit").onclick = async () => {
-    el("err").textContent = ""; el("ok").textContent = "";
+  // --- ACTION 2 : ENVOI ÉCRITURE ---
+  el("submitBtn").onclick = async () => {
+    el("err").textContent = ""; el("ok").textContent = "Envoi en cours...";
     
-    // CONSTRUCTION DU PAYLOAD (Harmonisé avec le Backend)
-    const meta = {
+    // On construit l'objet exactement comme le backend l'attend
+    const metaData = {
       journal: el("journal").value,
       referenceGedId: el("referenceGedId").value,
       compteFournisseur: el("compteFournisseur").value,
-      categorie_ui: el("categorie").value,
-      tva_rate: el("tvaRate").value,
-      date_ticket: el("dateTicket").value,
-      numero_ticket: el("numeroTicket").value,
-      raison_sociale: el("raisonSociale").value,
-      montant_ttc: el("ttc").value,
+      categorie_ui: el("categorie_ui").value,
+      tva_rate: el("tva_rate").value,
+      date_ticket: el("date_ticket").value,
+      numero_ticket: el("numero_ticket").value,
+      raison_sociale: el("raison_sociale").value,
+      montant_ttc: el("montant_ttc").value,
       ht: el("ht").value,
-      tva_montant: el("tvaMontant").value
+      tva_montant: el("tva_montant").value
     };
 
-    try {
-      const fd = new FormData();
-      fd.append("meta", JSON.stringify(meta)); // Envoi sous forme de string JSON dans FormData
+    if (!metaData.referenceGedId) {
+        el("err").textContent = "Veuillez d'abord envoyer le ticket (Etape 1).";
+        el("ok").textContent = "";
+        return;
+    }
 
+    const formData = new FormData();
+    formData.append("meta", JSON.stringify(metaData));
+
+    try {
       const r = await fetch("/api/receipts/submit", { 
         method: "POST", 
-        body: fd 
+        body: formData 
       });
       const out = await r.json();
-      if (!r.ok) throw new Error(out.error);
-      el("ok").textContent = "Écriture envoyée avec succès !";
-    } catch (e) { el("err").textContent = e.message; }
+      
+      if (!r.ok) throw new Error(out.error || "Erreur serveur");
+      
+      el("ok").textContent = "✅ Écriture enregistrée avec succès !";
+      el("err").textContent = "";
+    } catch (e) { 
+        el("err").textContent = "❌ " + e.message;
+        el("ok").textContent = "";
+    }
   };
 
-  // ADMIN
+  // --- ADMIN ACTIONS ---
   el("saveAdmin").onclick = async () => {
     const data = { baseUrl: el("baseUrl").value, identifiant: el("identifiant").value, motdepasse: el("motdepasse").value, codeDossier: el("codeDossier").value };
     await fetch("/api/admin/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
-    el("adminOk").textContent = "Config OK."; loadConfig();
+    el("adminOk").textContent = "Configuration enregistrée."; loadConfig();
   };
 
   el("openDossier").onclick = async () => {
     const r = await fetch("/api/cnx/session-dossier", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({codeDossier: el("codeDossier").value}) });
     const out = await r.json();
-    if(r.ok) el("adminOk").textContent = "Session Ouverte."; else el("adminErr").textContent = out.error;
+    if(r.ok) el("adminOk").textContent = "Dossier ouvert."; else el("adminErr").textContent = out.error;
   };
 
+  // Initialisation
   fillCategories(); fillVat(); loadConfig();
 </script>
 </body>
