@@ -52,6 +52,9 @@
       margin-top: 0;
       margin-bottom: 20px;
       color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .card {
@@ -118,7 +121,6 @@
     
     .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: -10px; margin-bottom: 10px; }
 
-    /* Cache les alertes vides */
     .error:empty, .success:empty { display: none; }
     .error, .success {
       padding: 12px;
@@ -158,56 +160,33 @@
 <body>
 
 <div class="container">
-  <center><img src="http://www.image-heberg.fr/files/17719994912427564640.png" alt="logo.png" /></center>
+  <center><img src="http://www.image-heberg.fr/files/1771946239507659589.png" alt="Logo Tikeo"></center>
   <h1 id="pageTitle">Gestion des frais</h1>
 
   <div id="adminBlock" class="card hidden">
     <h3>⚙️ Configuration Admin</h3>
-
-    <label>CNX base URL
-      <input id="baseUrl" placeholder="https://isuiteacd.suiteexpert.fr/cnx/api">
-    </label>
-
+    <label>CNX base URL <input id="baseUrl" placeholder="https://..."></label>
     <div class="row">
-      <div>
-        <label>Identifiant
-          <input id="identifiant" placeholder="Identifiant">
-        </label>
-      </div>
-      <div>
-        <label>Mot de passe
-          <input id="motdepasse" type="password" placeholder="••••••••">
-        </label>
-      </div>
+      <div><label>Identifiant <input id="identifiant"></label></div>
+      <div><label>Mot de passe <input id="motdepasse" type="password"></label></div>
     </div>
-
-    <label>Code dossier
-      <input id="codeDossier" placeholder="DA_CONSEIL">
-    </label>
-
+    <label>Code dossier <input id="codeDossier"></label>
     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:20px;">
         <button id="saveAdmin">Enregistrer</button>
         <button id="openDossier" class="btn-success">Ouvrir dossier</button>
     </div>
-
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
-
     <hr style="margin:25px 0; border:0; border-top:1px solid var(--border);">
     <button onclick="window.location.href='?'" class="btn-secondary">← Retour à l'accueil</button>
   </div>
 
   <div id="userBlock" class="hidden">
-    
     <div class="card">
       <h3>1️⃣ Justificatif</h3>
-      <label>Dossier : <input id="codeDossierView" readonly style="display:inline-block; width:auto; border:none; background:transparent; font-weight:bold;"></label>
-      
-      <label>Photo ou PDF
-        <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
-      </label>
-
-      <button id="uploadGed">Envoyer le ticket</button>
+      <label>Dossier : <input id="codeDossierView" readonly style="border:none; background:transparent; font-weight:bold; width:auto;"></label>
+      <label>Photo ou PDF <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment"></label>
+      <button id="uploadGed">Scanner & Convertir en PDF</button>
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
       <input id="referenceGedId" type="hidden">
@@ -215,53 +194,33 @@
 
     <div class="card">
       <h3>2️⃣ Comptabilité</h3>
-
       <div class="row">
-        <div>
-          <label>Journal <input id="journal" value="AC"></label>
-        </div>
-        <div>
-          <label>Fournisseur
+        <div><label>Journal <input id="journal" value="AC"></label></div>
+        <div><label>Fournisseur
             <select id="compteFournisseur">
-              <option value="FREPAS">FREPAS</option>
-              <option value="FCARBU">FCARBU</option>
-              <option value="FPARKING">FPARKING</option>
-              <option value="FPEAGE">FPEAGE</option>
+              <option value="FREPAS">FREPAS</option><option value="FCARBU">FCARBU</option>
+              <option value="FPARKING">FPARKING</option><option value="FPEAGE">FPEAGE</option>
               <option value="FDIVERS" selected>FDIVERS</option>
             </select>
-          </label>
-        </div>
+        </label></div>
       </div>
-
       <div class="row">
         <div><label>Catégorie <select id="categorie"></select></label></div>
         <div><label>TVA (%) <select id="tvaRate"></select></label></div>
       </div>
-
       <div class="row">
         <div><label>Date <input id="dateTicket" type="date"></label></div>
         <div><label>N° Ticket <input id="numeroTicket" placeholder="T0001"></label></div>
       </div>
-
-      <label>Libellé / Raison sociale
-        <input id="raisonSociale" placeholder="ex: TOTAL ACCESS">
-      </label>
-
+      <label>Raison sociale <input id="raisonSociale" placeholder="ex: TOTAL"></label>
       <div class="row">
         <div><label>TTC (€) <input id="ttc" inputmode="decimal" placeholder="0,00"></label></div>
         <div><label>HT (€) <input id="ht" inputmode="decimal" placeholder="0,00"></label></div>
       </div>
-
       <label>TVA (€) <input id="tvaMontant" inputmode="decimal" placeholder="0,00"></label>
-
       <button id="submit">Valider l'écriture</button>
       <div id="err" class="error"></div>
       <div id="ok" class="success"></div>
-    </div>
-
-    <div id="debugCard" class="card hidden">
-      <h3>Debug Output</h3>
-      <textarea id="debugOut" readonly style="min-height:100px; background:#1e293b; color:#fff; font-size:11px;"></textarea>
     </div>
   </div>
 </div>
@@ -275,7 +234,6 @@
   const qs = new URLSearchParams(location.search);
   const isAdmin = qs.get("admin") === "1";
   
-  // Routage
   if (isAdmin) {
     el("pageTitle").textContent = "Admin";
     el("adminBlock").classList.remove("hidden");
@@ -304,9 +262,7 @@
     if (opt) selectEl.value = value;
   }
 
-  function fillCategories(){
-    el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join("");
-  }
+  function fillCategories(){ el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join(""); }
 
   function fillVatForCurrentCategory(){
     const cat = CATEGORIES.find(c => c.key === el("categorie").value);
@@ -331,12 +287,35 @@
     return "T" + String(next).padStart(4, "0");
   }
 
-  // --- LOGIQUE OPENCV (CORRIGÉE) ---
+  /** GESTION DES BLOTS PDF (JPEG -> PDF) **/
+  function generateMinimalPDF(jpegBlob, width, height) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function() {
+            const bytes = new Uint8Array(reader.result);
+            const pageW = 595, pageH = 842; // A4
+            const chunks = [];
+            const add = s => chunks.push(new TextEncoder().encode(s));
+            
+            add("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+            add("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+            add(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`);
+            add(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.length} >>\nstream\n`);
+            chunks.push(bytes);
+            add("\nendstream\nendobj\n");
+            add(`5 0 obj\n<< /Length 44 >>\nstream\nq 595 0 0 842 0 0 cm /Im0 Do Q\nendstream\nendobj\n`);
+            add("xref\n0 6\n0000000000 65535 f\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n500\n%%EOF");
+            resolve(new Blob(chunks, { type: "application/pdf" }));
+        };
+        reader.readAsArrayBuffer(jpegBlob);
+    });
+  }
+
   function scanTicketOpenCV(srcCanvas) {
     let src = cv.imread(srcCanvas);
     let gray = new cv.Mat(), blur = new cv.Mat(), edges = new cv.Mat();
     let contours = new cv.MatVector(), hierarchy = new cv.Mat();
-    let finalCanvas = srcCanvas;
+    let outCanvas = srcCanvas;
 
     try {
       cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
@@ -356,81 +335,85 @@
           if (bestCnt) bestCnt.delete();
           bestCnt = approx;
         } else { approx.delete(); }
+        cnt.delete();
       }
 
       if (bestCnt && maxArea > (src.rows * src.cols * 0.1)) {
-        // Simple perspective warp logic
-        finalCanvas = document.createElement("canvas");
-        cv.imshow(finalCanvas, src); // Simplifié pour éviter erreurs mémoires complexes
+        outCanvas = document.createElement("canvas");
+        cv.imshow(outCanvas, src); // Rendu simple pour éviter fuite mémoire
       }
       if (bestCnt) bestCnt.delete();
     } catch (e) { console.error(e); }
 
-    // Nettoyage manuel OpenCV
     src.delete(); gray.delete(); blur.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    return finalCanvas;
+    return outCanvas;
   }
 
-  async function imageFileToPdfBlob(file) {
-    if (!window.cv || !cv.Mat) return file; 
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    await new Promise(r => img.onload = r);
-    const c = document.createElement("canvas");
-    c.width = img.width; c.height = img.height;
-    c.getContext("2d").drawImage(img, 0, 0);
-    const processed = scanTicketOpenCV(c);
-    const dataUrl = processed.toDataURL("image/jpeg", 0.8);
-    return fetch(dataUrl).then(r => r.blob());
-  }
+  el("uploadGed").onclick = async () => {
+    el("gedErr").textContent = ""; el("gedOk").textContent = "Préparation du PDF...";
+    const file = el("fileInput").files[0];
+    if (!file) return el("gedErr").textContent = "Fichier manquant.";
+    
+    try {
+      let finalBlob = file;
+      if (file.type.includes("image")) {
+          if (!window.cv) { el("gedErr").textContent = "OpenCV en cours de chargement..."; return; }
+          const img = new Image();
+          img.src = URL.createObjectURL(file);
+          await new Promise(r => img.onload = r);
+          const c = document.createElement("canvas");
+          c.width = img.width; c.height = img.height;
+          c.getContext("2d").drawImage(img, 0, 0);
+          const processed = scanTicketOpenCV(c);
+          
+          // Conversion Canvas -> JPEG Blob -> PDF Blob
+          const jpegBlob = await new Promise(r => processed.toBlob(r, "image/jpeg", 0.85));
+          finalBlob = await generateMinimalPDF(jpegBlob, processed.width, processed.height);
+          el("gedOk").textContent = "Conversion PDF réussie. Envoi...";
+      }
+
+      const fd = new FormData();
+      fd.append("pdf", finalBlob, "ticket_frais.pdf");
+      const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
+      const out = await r.json();
+      if (!r.ok) throw new Error(out.error);
+      
+      el("referenceGedId").value = out.gedId;
+      el("gedOk").textContent = "PDF envoyé à la GED !";
+      const ex = out.extraction || {};
+      el("dateTicket").value = ex.date_document || "";
+      el("raisonSociale").value = ex.raison_sociale || "";
+      el("numeroTicket").value = ex.numero_ticket || nextTicketNumber();
+      el("ttc").value = String(ex.montant_ttc || "").replace(".", ",");
+      el("ht").value = String(ex.montant_ht || "").replace(".", ",");
+      el("tvaMontant").value = String(ex.montant_tva || "").replace(".", ",");
+      if(out.suggestion?.categorie_ui) setSelect(el("categorie"), out.suggestion.categorie_ui);
+      fillVatForCurrentCategory();
+    } catch (e) { el("gedErr").textContent = e.message; el("gedOk").textContent = ""; }
+  };
+
+  el("submit").onclick = async () => {
+    const meta = { referenceGedId: el("referenceGedId").value, journal: el("journal").value, compteFournisseur: el("compteFournisseur").value, date_ticket: el("dateTicket").value, numero_ticket: el("numeroTicket").value || nextTicketNumber(), raison_sociale: el("raisonSociale").value, montant_ttc: toNumOrNull(el("ttc").value), ht: toNumOrNull(el("ht").value), tva_montant: toNumOrNull(el("tvaMontant").value) };
+    const fd = new FormData(); fd.append("meta", JSON.stringify(meta));
+    const r = await fetch("/api/receipts/submit", { method: "POST", body: fd });
+    if(r.ok) el("ok").textContent = "Écriture validée !";
+    else el("err").textContent = "Erreur d'envoi.";
+  };
 
   if (isAdmin) {
     el("saveAdmin").onclick = async () => {
       const data = { baseUrl: el("baseUrl").value, identifiant: el("identifiant").value, motdepasse: el("motdepasse").value, codeDossier: el("codeDossier").value };
-      const r = await fetch("/api/admin/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
-      if(r.ok) el("adminOk").textContent = "Config sauvegardée.";
+      await fetch("/api/admin/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
+      el("adminOk").textContent = "Enregistré.";
     };
     el("openDossier").onclick = async () => {
-      const r = await fetch("/api/cnx/session-dossier", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({codeDossier: el("codeDossier").value}) });
-      if(r.ok) el("adminOk").textContent = "Dossier ouvert.";
+      await fetch("/api/cnx/session-dossier", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({codeDossier: el("codeDossier").value}) });
+      el("adminOk").textContent = "Session ouverte.";
     };
   } else {
     fillCategories(); fillVatForCurrentCategory();
     el("categorie").onchange = fillVatForCurrentCategory;
     loadCodeDossier();
-
-    el("uploadGed").onclick = async () => {
-      el("gedErr").textContent = ""; el("gedOk").textContent = "Analyse...";
-      const file = el("fileInput").files[0];
-      if (!file) return el("gedErr").textContent = "Fichier manquant.";
-      try {
-        const blob = file.type.includes("image") ? await imageFileToPdfBlob(file) : file;
-        const fd = new FormData(); fd.append("pdf", blob, "doc.pdf");
-        const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
-        const out = await r.json();
-        if (!r.ok) throw new Error(out.error);
-        
-        el("referenceGedId").value = out.gedId;
-        el("gedOk").textContent = "Ticket chargé.";
-        const ex = out.extraction || {};
-        el("dateTicket").value = ex.date_document || "";
-        el("raisonSociale").value = ex.raison_sociale || "";
-        el("numeroTicket").value = ex.numero_ticket || nextTicketNumber();
-        el("ttc").value = String(ex.montant_ttc || "").replace(".", ",");
-        el("ht").value = String(ex.montant_ht || "").replace(".", ",");
-        el("tvaMontant").value = String(ex.montant_tva || "").replace(".", ",");
-        if(out.suggestion?.categorie_ui) setSelect(el("categorie"), out.suggestion.categorie_ui);
-        fillVatForCurrentCategory();
-      } catch (e) { el("gedErr").textContent = e.message; el("gedOk").textContent = ""; }
-    };
-
-    el("submit").onclick = async () => {
-      const meta = { referenceGedId: el("referenceGedId").value, journal: el("journal").value, compteFournisseur: el("compteFournisseur").value, date_ticket: el("dateTicket").value, numero_ticket: el("numeroTicket").value || nextTicketNumber(), raison_sociale: el("raisonSociale").value, montant_ttc: toNumOrNull(el("ttc").value), ht: toNumOrNull(el("ht").value), tva_montant: toNumOrNull(el("tvaMontant").value) };
-      const fd = new FormData(); fd.append("meta", JSON.stringify(meta));
-      const r = await fetch("/api/receipts/submit", { method: "POST", body: fd });
-      if(r.ok) el("ok").textContent = "Écriture validée !";
-      else el("err").textContent = "Erreur lors de l'envoi.";
-    };
   }
 </script>
 </body>
