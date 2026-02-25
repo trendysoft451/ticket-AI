@@ -149,28 +149,42 @@
     font-style: italic;
   }
 
-  .error, .success {
-    padding: 12px;
-    border-radius: 8px;
-    margin-top: 15px;
-    font-weight: 500;
-    font-size: 0.85rem;
-    text-align: center;
-  }
+ /* Cache les messages s'ils sont vides (pas d'espace, pas de texte) */
+.error:empty, 
+.success:empty {
+  display: none;
+}
 
-  .error {
-    background: #fee2e2;
-    color: var(--error);
-    border: 1px solid #fecaca;
-  }
+/* Style des messages lorsqu'ils contiennent du texte (via JS) */
+.error, .success {
+  padding: 14px;
+  border-radius: 8px;
+  margin: 15px 0;
+  font-weight: 500;
+  font-size: 0.9rem;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  animation: slideIn 0.3s ease-out; /* Petit effet d'apparition */
+}
 
-  .success {
-    background: #ecfdf5;
-    color: var(--success);
-    border: 1px solid #d1fae5;
-  }
+.error {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fee2e2;
+}
 
-  .hidden { display: none; }
+.success {
+  background-color: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #dcfce7;
+}
+
+/* Animation pour rendre l'apparition moins brutale */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
   textarea {
     min-height: 120px;
@@ -197,7 +211,7 @@
 </head>
 <body>
 <div class="container">
-<center><img src="http://www.image-heberg.fr/files/1771946239507659589.png" width="480" height="640"></center>
+<center><img src="http://www.image-heberg.fr/files/17719994912427564640.png" alt="logo.png" /></center>
   <h1 id="pageTitle">Gestion des frais</h1>
 
   <!-- ADMIN -->
