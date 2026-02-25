@@ -185,7 +185,6 @@
       filter:saturate(.9);
     }
 
-    /* Titre + action (roue crantée) */
     .title-row{
       display:flex;
       align-items:center;
@@ -208,10 +207,12 @@
       cursor:pointer;
       box-shadow:var(--shadow-soft);
       padding:0;
+      color:#000; /* ✅ icône noire */
     }
     .icon-btn:hover{
       box-shadow:0 0 0 4px rgba(37,99,235,.10);
       border-color:rgba(37,99,235,.55);
+      color:#000;
     }
     .icon-btn svg{ width:20px; height:20px; }
 
@@ -221,9 +222,6 @@
       .row > div{ min-width:100%; }
       h1{ font-size:1.35rem; }
     }
-    #goAdmin svg{
-  color:#000;
-}
   </style>
 </head>
 
@@ -261,6 +259,9 @@
     <button id="saveAdmin">Enregistrer</button>
     <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
 
+    <!-- ✅ Retour accueil en admin -->
+    <button id="backHome" style="background:#64748b">Retour accueil</button>
+
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
   </div>
@@ -272,9 +273,7 @@
       <div class="title-row">
         <h3>1️⃣ Scannez le ticket ou importez le PDF</h3>
 
-        <!-- Bouton réglages => /?admin=1 -->
         <button class="icon-btn" id="goAdmin" type="button" aria-label="Réglages">
-          <!-- gear icon (inline SVG) -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
@@ -302,7 +301,6 @@
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
 
-      <!-- ✅ ID GED masqué -->
       <input id="referenceGedId" type="hidden">
     </div>
 
@@ -387,7 +385,6 @@
   </div>
 </div>
 
-<!-- OpenCV.js -->
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <script>
@@ -443,7 +440,6 @@
     }
   }
 
-  /** ===== Ticket auto: T0001, T0002... ===== */
   function nextTicketNumber() {
     const key = "ticket_counter_T";
     const prev = Number(localStorage.getItem(key) || "0");
@@ -459,7 +455,6 @@
     return t;
   }
 
-  /** ===== OpenCV ready ===== */
   function waitForOpenCV(timeoutMs = 12000) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
@@ -471,7 +466,6 @@
     });
   }
 
-  /** rotation EXIF auto si support */
   async function loadImageBitmapWithOrientation(file) {
     if (window.createImageBitmap) {
       try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
@@ -549,7 +543,6 @@
     let best = null;
     let bestArea = 0;
 
-    // ✅ FIX Mat already deleted : clone()
     for (let i = 0; i < contours.size(); i++) {
       const cnt = contours.get(i);
       const peri = cv.arcLength(cnt, true);
@@ -624,13 +617,6 @@
     return outCanvas;
   }
 
-  async function imageFileToTicketCanvas(imageFile) {
-    await waitForOpenCV();
-    const bitmap = await loadImageBitmapWithOrientation(imageFile);
-    const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
-    return scanTicketOpenCV(baseCanvas);
-  }
-
   function canvasToJpegBytes(canvas, quality = 0.86) {
     const dataUrl = canvas.toDataURL("image/jpeg", quality);
     const base64 = dataUrl.split(",")[1];
@@ -639,6 +625,7 @@
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return { bytes, w: canvas.width, h: canvas.height };
   }
+
   function strToBytes(s) { return new TextEncoder().encode(s); }
 
   function jpegToPdfBlob(jpegBytes, imgW, imgH) {
@@ -696,7 +683,10 @@
   }
 
   async function imageFileToPdfBlob(imageFile) {
-    const canvas = await imageFileToTicketCanvas(imageFile);
+    await waitForOpenCV();
+    const bitmap = await loadImageBitmapWithOrientation(imageFile);
+    const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
+    const canvas = scanTicketOpenCV(baseCanvas);
     const { bytes, w, h } = canvasToJpegBytes(canvas, 0.86);
     return jpegToPdfBlob(bytes, w, h);
   }
@@ -714,33 +704,17 @@
     }
   }
 
-  function resetAfterSubmit() {
-    // On garde le dossier affiché, et le journal/fournisseur/catégorie/tva si tu veux.
-    // Ici on reset ce qui est lié au ticket et aux montants.
-    el("fileInput").value = "";
-    el("referenceGedId").value = "";
-    el("dateTicket").value = "";
-    el("raisonSociale").value = "";
-    el("ttc").value = "";
-    el("ht").value = "";
-    el("tvaMontant").value = "";
-    el("gedOk").textContent = "";
-    el("gedErr").textContent = "";
-    el("err").textContent = "";
-    el("ok").textContent = "";
-
-    // Nouveau numéro auto prêt pour le prochain ticket
-    el("numeroTicket").value = "";
-    ensureTicketNumber();
-
-    // Remonte en haut (confort mobile)
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  function scheduleRefreshIn5s() {
+    setTimeout(() => location.reload(), 5000);
   }
 
-  // ===== UI =====
   if (isAdmin) {
     el("pageTitle").textContent = "Admin";
     el("adminBlock").classList.remove("hidden");
+
+    el("backHome").addEventListener("click", () => {
+      window.location.href = "/?";
+    });
 
     el("saveAdmin").addEventListener("click", async () => {
       el("adminErr").textContent = "";
@@ -798,7 +772,6 @@
     el("userBlock").classList.remove("hidden");
     if (isDebug) el("debugCard").classList.remove("hidden");
 
-    // bouton roue crantée
     el("goAdmin").addEventListener("click", () => {
       window.location.href = "/?admin=1";
     });
@@ -810,7 +783,6 @@
     (async () => {
       const cd = await loadCodeDossier();
       if (!cd) el("gedErr").textContent = "Code dossier non configuré. Cliquez sur l’icône réglages.";
-      // prépare un numéro ticket dès l'arrivée (optionnel mais pratique)
       ensureTicketNumber();
     })();
 
@@ -855,7 +827,6 @@
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur upload/OCR");
 
-        // ✅ ID GED stocké mais non affiché
         el("referenceGedId").value = out.gedId;
 
         const ex = out.extraction || {};
@@ -875,12 +846,10 @@
         if (sug.tva_rate) setSelect(el("tvaRate"), sug.tva_rate);
         if (sug.compteF) setSelect(el("compteFournisseur"), sug.compteF);
 
-        // ✅ Message : uniquement le numéro de ticket
         const num = String(el("numeroTicket").value || "").trim();
         el("gedOk").textContent = num ? ("OK — Ticket chargé. N° ticket : " + num) : "OK — Ticket chargé.";
 
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
-
       } catch (e) {
         el("gedErr").textContent = String(e.message || e);
       } finally {
@@ -894,7 +863,10 @@
       if (isDebug) el("debugOut").value = "";
 
       const referenceGedId = (el("referenceGedId").value || "").trim();
-      if (!referenceGedId) { el("err").textContent = "Envoie d'abord le ticket (Étape 1)."; return; }
+      if (!referenceGedId) {
+        el("err").textContent = "Envoie d'abord le ticket (Étape 1).";
+        return;
+      }
 
       const numeroTicket = ensureTicketNumber();
 
@@ -921,15 +893,17 @@
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
 
-        el("ok").textContent = "OK — écriture envoyée.";
-
+        // ✅ message succès + refresh 5s
+        el("ok").textContent = "✅ Écriture envoyée. Rafraîchissement dans 5 secondes…";
+        el("err").textContent = "";
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
 
-        // ✅ Rafraîchir l'UI après envoi
-        resetAfterSubmit();
-
+        scheduleRefreshIn5s();
       } catch (e) {
-        el("err").textContent = String(e.message || e);
+        // ✅ message erreur + refresh 5s
+        el("err").textContent = "❌ " + String(e.message || e) + "\nRafraîchissement dans 5 secondes…";
+        el("ok").textContent = "";
+        scheduleRefreshIn5s();
       } finally {
         setBtnLoading(el("submit"), false);
       }
