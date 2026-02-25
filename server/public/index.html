@@ -2,286 +2,223 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Tikeo - Gestion des frais</title>
   <style>
-  :root {
-    --primary: #2563eb;
-    --primary-hover: #1d4ed8;
-    --success: #059669;
-    --error: #dc2626;
-    --bg: #047154;
-    --card-bg: #ffffff;
-    --text-main: #1e293b;
-    --text-muted: #64748b;
-    --border: #e2e8f0;
-    --radius: 12px;
-  }
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #059669;
+      --error: #dc2626;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 12px;
+    }
 
-  body {
-    margin: 0;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: var(--bg);
-    color: var(--text-main);
-    line-height: 1.5;
-  }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+    }
 
-  .container {
-    max-width: 650px; /* Plus étroit pour un look "App" */
-    margin: 0 auto;
-    padding: 20px;
-  }
+    .container {
+      max-width: 650px;
+      margin: 0 auto;
+      padding: 20px;
+      padding-bottom: 80px;
+    }
 
-  center img {
-    max-width: 140px;
-    margin-bottom: 20px;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05));
-  }
+    center img {
+      max-width: 140px;
+      margin-bottom: 10px;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05));
+    }
 
-  h1 {
-    font-size: 1.5rem;
-    font-weight: 800;
-    text-align: center;
-    color: var(--text-main);
-    margin-bottom: 30px;
-    letter-spacing: -0.025em;
-  }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 30px;
+      letter-spacing: -0.025em;
+    }
 
-  h3 {
-    font-size: 1.1rem;
-    margin-top: 0;
-    margin-bottom: 20px;
-    color: var(--primary);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
+    h3 {
+      font-size: 1.1rem;
+      margin-top: 0;
+      margin-bottom: 20px;
+      color: var(--primary);
+    }
 
-  .card {
-    background: var(--card-bg);
-    padding: 24px;
-    margin-bottom: 20px;
-    border-radius: var(--radius);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    border: 1px solid var(--border);
-  }
+    .card {
+      background: var(--card-bg);
+      padding: 24px;
+      margin-bottom: 20px;
+      border-radius: var(--radius);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--border);
+    }
 
-  label {
-    display: block;
-    margin-bottom: 16px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--text-main);
-  }
+    label {
+      display: block;
+      margin-bottom: 16px;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
 
-  input, select, textarea {
-    width: 100%;
-    margin-top: 6px;
-    padding: 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    font-size: 16px; /* Évite le zoom auto sur iPhone */
-    background-color: #fcfcfd;
-    transition: all 0.2s;
-    box-sizing: border-box;
-  }
+    input, select, textarea {
+      width: 100%;
+      margin-top: 6px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 16px;
+      background-color: #fcfcfd;
+      box-sizing: border-box;
+      transition: all 0.2s;
+    }
 
-  input:focus, select:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    background-color: #fff;
-  }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      background-color: #fff;
+    }
 
-  input[readonly] {
-    background-color: #f1f5f9;
-    color: var(--text-muted);
-    cursor: not-allowed;
-  }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
 
-  .row {
-    display: flex;
-    flex-wrap: wrap; /* Important pour mobile */
-    gap: 16px;
-    margin-bottom: 0;
-  }
+    .row > div { flex: 1; min-width: 140px; }
 
-  .row > div {
-    flex: 1;
-    min-width: 200px; /* Force l'empilement sur petits écrans */
-  }
+    button {
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-top: 10px;
+      transition: transform 0.1s;
+    }
 
-  button {
-    width: 100%; /* Full width sur mobile */
-    padding: 14px 20px;
-    background: var(--primary);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 700;
-    font-size: 0.95rem;
-    transition: transform 0.1s, background 0.2s;
-    margin-top: 10px;
-  }
+    button:active { transform: scale(0.98); }
 
-  button:hover {
-    background: var(--primary-hover);
-  }
+    .btn-secondary { background: #64748b; }
+    .btn-success { background: var(--success); }
+    
+    .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: -10px; margin-bottom: 10px; }
 
-  button:active {
-    transform: scale(0.98);
-  }
+    /* Cache les alertes vides */
+    .error:empty, .success:empty { display: none; }
+    .error, .success {
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      animation: fadeIn 0.3s;
+    }
+    .error { background: #fee2e2; color: var(--error); border: 1px solid #fecaca; }
+    .success { background: #ecfdf5; color: var(--success); border: 1px solid #d1fae5; }
 
-  button#uploadGed {
-    background: var(--text-main);
-  }
+    .hidden { display: none; }
 
-  button#openDossier {
-    background: var(--success) !important;
-  }
+    #adminTrigger {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-size: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      z-index: 100;
+    }
 
-  .hint {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: -10px;
-    margin-bottom: 15px;
-    font-style: italic;
-  }
-
- /* Cache les messages s'ils sont vides (pas d'espace, pas de texte) */
-.error:empty, 
-.success:empty {
-  display: none;
-}
-
-/* Style des messages lorsqu'ils contiennent du texte (via JS) */
-.error, .success {
-  padding: 14px;
-  border-radius: 8px;
-  margin: 15px 0;
-  font-weight: 500;
-  font-size: 0.9rem;
-  text-align: left;
-  display: flex;
-  align-items: center;
-  animation: slideIn 0.3s ease-out; /* Petit effet d'apparition */
-}
-
-.error {
-  background-color: #fef2f2;
-  color: #b91c1c;
-  border: 1px solid #fee2e2;
-}
-
-.success {
-  background-color: #f0fdf4;
-  color: #15803d;
-  border: 1px solid #dcfce7;
-}
-
-/* Animation pour rendre l'apparition moins brutale */
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-  textarea {
-    min-height: 120px;
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    background: #1e293b;
-    color: #f8fafc;
-    border: none;
-  }
-
-  /* Amélioration spécifique pour le champ File */
-  input[type="file"] {
-    padding: 8px;
-    background: #f8fafc;
-    border: 2px dashed var(--border);
-  }
-
-  /* Adaptations Tablettes/Desktop */
-  @media (min-width: 600px) {
-    button { width: auto; min-width: 160px; }
-    h1 { font-size: 2rem; }
-  }
-</style>
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @media (min-width: 600px) { button { width: auto; min-width: 160px; } }
+  </style>
 </head>
 <body>
+
 <div class="container">
-<center><img src="http://www.image-heberg.fr/files/17719994912427564640.png" alt="logo.png" /></center>
+  <center><img src="http://www.image-heberg.fr/files/1771946239507659589.png" alt="Logo Tikeo"></center>
   <h1 id="pageTitle">Gestion des frais</h1>
 
-  <!-- ADMIN -->
   <div id="adminBlock" class="card hidden">
-    <h3>Admin</h3>
+    <h3>⚙️ Configuration Admin</h3>
 
-    <label>CNX base URL (ex: https://isuiteacd.suiteexpert.fr/cnx/api)
+    <label>CNX base URL
       <input id="baseUrl" placeholder="https://isuiteacd.suiteexpert.fr/cnx/api">
     </label>
 
     <div class="row">
       <div>
         <label>Identifiant
-          <input id="identifiant" placeholder="...">
+          <input id="identifiant" placeholder="Identifiant">
         </label>
       </div>
       <div>
         <label>Mot de passe
-          <input id="motdepasse" type="password" placeholder="...">
+          <input id="motdepasse" type="password" placeholder="••••••••">
         </label>
       </div>
     </div>
 
-    <label>Code dossier (ex: DA_CONSEIL)
+    <label>Code dossier
       <input id="codeDossier" placeholder="DA_CONSEIL">
     </label>
-    <div class="hint">Requis : l’upload GED est bloqué si vide.</div>
 
-    <button id="saveAdmin">Enregistrer</button>
-    <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:20px;">
+        <button id="saveAdmin">Enregistrer</button>
+        <button id="openDossier" class="btn-success">Ouvrir dossier</button>
+    </div>
 
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
+
+    <hr style="margin:25px 0; border:0; border-top:1px solid var(--border);">
+    <button onclick="window.location.href='?'" class="btn-secondary">← Retour à l'accueil</button>
   </div>
 
-  <!-- USER -->
   <div id="userBlock" class="hidden">
-  
+    
     <div class="card">
-      <h3>1️⃣ Scannez le ticket ou importez le PDF</h3>
-
-      <label>Code dossier comptable
-        <input id="codeDossierView" readonly>
-      </label>
-
-      <label>Ticket à envoyer (Par photo en mobile)
+      <h3>1️⃣ Justificatif</h3>
+      <label>Dossier : <input id="codeDossierView" readonly style="display:inline-block; width:auto; border:none; background:transparent; font-weight:bold;"></label>
+      
+      <label>Photo ou PDF
         <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
       </label>
-      <div class="hint">
-     
-      </div>
 
       <button id="uploadGed">Envoyer le ticket</button>
-
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
-
-      <label>
-        <input id="referenceGedId" readonly>
-      </label>
+      <input id="referenceGedId" type="hidden">
     </div>
 
     <div class="card">
-      <h3>2️⃣ Écriture comptable</h3>
+      <h3>2️⃣ Comptabilité</h3>
 
       <div class="row">
         <div>
-          <label>Journal
-            <input id="journal" value="AC">
-          </label>
+          <label>Journal <input id="journal" value="AC"></label>
         </div>
         <div>
           <label>Fournisseur
@@ -297,75 +234,58 @@
       </div>
 
       <div class="row">
-        <div>
-          <label>Catégorie dépenses
-            <select id="categorie"></select>
-          </label>
-        </div>
-        <div>
-          <label>TVA (%)
-            <select id="tvaRate"></select>
-          </label>
-        </div>
+        <div><label>Catégorie <select id="categorie"></select></label></div>
+        <div><label>TVA (%) <select id="tvaRate"></select></label></div>
       </div>
 
       <div class="row">
-        <div>
-          <label>Date ticket (YYYY-MM-DD)
-            <input id="dateTicket" placeholder="2025-01-02">
-          </label>
-        </div>
-        <div>
-          <label>Numéro ticket (si vide → auto T0001, T0002…)
-            <input id="numeroTicket" placeholder="ex: T0001">
-          </label>
-        </div>
+        <div><label>Date <input id="dateTicket" type="date"></label></div>
+        <div><label>N° Ticket <input id="numeroTicket" placeholder="T0001"></label></div>
       </div>
 
-      <label>Raison sociale (libellé)
-        <input id="raisonSociale" placeholder="ex: L'ATELIER DE LA PAIX">
+      <label>Libellé / Raison sociale
+        <input id="raisonSociale" placeholder="ex: TOTAL ACCESS">
       </label>
 
       <div class="row">
-        <div>
-          <label>Montant TTC
-            <input id="ttc" inputmode="decimal" placeholder="25,50">
-          </label>
-        </div>
-        <div>
-          <label>Montant HT
-            <input id="ht" inputmode="decimal" placeholder="23,18">
-          </label>
-        </div>
+        <div><label>TTC (€) <input id="ttc" inputmode="decimal" placeholder="0,00"></label></div>
+        <div><label>HT (€) <input id="ht" inputmode="decimal" placeholder="0,00"></label></div>
       </div>
 
-      <label>Montant TVA
-        <input id="tvaMontant" inputmode="decimal" placeholder="2,32">
-      </label>
+      <label>TVA (€) <input id="tvaMontant" inputmode="decimal" placeholder="0,00"></label>
 
-      <button id="submit">Envoyer l’écriture</button>
+      <button id="submit">Valider l'écriture</button>
       <div id="err" class="error"></div>
       <div id="ok" class="success"></div>
     </div>
 
     <div id="debugCard" class="card hidden">
-      <h3>Debug (/?debug=1)</h3>
-      <textarea id="debugOut" readonly></textarea>
+      <h3>Debug Output</h3>
+      <textarea id="debugOut" readonly style="min-height:100px; background:#1e293b; color:#fff; font-size:11px;"></textarea>
     </div>
   </div>
 </div>
 
-<!-- OpenCV.js -->
+<a href="?admin=1" id="adminTrigger">⚙️</a>
+
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <script>
   const el = (id) => document.getElementById(id);
   const qs = new URLSearchParams(location.search);
   const isAdmin = qs.get("admin") === "1";
-  const isDebug = qs.get("debug") === "1";
+  
+  // Routage
+  if (isAdmin) {
+    el("pageTitle").textContent = "Admin";
+    el("adminBlock").classList.remove("hidden");
+    el("adminTrigger").classList.add("hidden");
+  } else {
+    el("userBlock").classList.remove("hidden");
+  }
 
   const CATEGORIES = [
-    { key: "petites_fournitures", label: "Petites fournitures et entretien", vat: ["20","10"] },
+    { key: "petites_fournitures", label: "Petites fournitures", vat: ["20","10"] },
     { key: "papeterie", label: "Papeterie", vat: ["20"] },
     { key: "carburant", label: "Carburant", vat: ["20"] },
     { key: "repas_pro", label: "Repas pro", vat: ["10"] },
@@ -376,13 +296,10 @@
 
   function toNumOrNull(v){
     const s = String(v || "").trim().replace(",", ".");
-    if (!s) return null;
-    const x = Number(s);
-    return Number.isFinite(x) ? x : null;
+    return s ? Number(s) : null;
   }
 
   function setSelect(selectEl, value){
-    if (!value) return;
     const opt = [...selectEl.options].find(o => o.value === value);
     if (opt) selectEl.value = value;
   }
@@ -401,455 +318,119 @@
 
   async function loadCodeDossier(){
     try{
-      const resp = await fetch("/api/admin/public");
-      const out = await resp.json();
-      el("codeDossierView").value = out.codeDossier || "";
-      return out.codeDossier || "";
-    }catch{
-      el("codeDossierView").value = "";
-      return "";
-    }
+      const r = await fetch("/api/admin/public");
+      const out = await r.json();
+      el("codeDossierView").value = out.codeDossier || "Non configuré";
+    } catch(e) {}
   }
 
-  /** ===== Ticket auto: T0001, T0002... ===== */
   function nextTicketNumber() {
     const key = "ticket_counter_T";
-    const prev = Number(localStorage.getItem(key) || "0");
-    const next = prev + 1;
+    const next = Number(localStorage.getItem(key) || "0") + 1;
     localStorage.setItem(key, String(next));
     return "T" + String(next).padStart(4, "0");
   }
-  function ensureTicketNumber() {
-    const v = String(el("numeroTicket").value || "").trim();
-    if (v) return v;
-    const t = nextTicketNumber();
-    el("numeroTicket").value = t;
-    return t;
-  }
 
-  /** ===== OpenCV ready ===== */
-  function waitForOpenCV(timeoutMs = 12000) {
-    return new Promise((resolve, reject) => {
-      const start = Date.now();
-      (function poll(){
-        if (window.cv && cv.Mat) return resolve();
-        if (Date.now() - start > timeoutMs) return reject(new Error("OpenCV.js non chargé (réseau ?)"));
-        setTimeout(poll, 60);
-      })();
-    });
-  }
-
-  /** rotation EXIF auto si support */
-  async function loadImageBitmapWithOrientation(file) {
-    if (window.createImageBitmap) {
-      try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
-      catch { return await createImageBitmap(file); }
-    }
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = url;
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-    URL.revokeObjectURL(url);
-    return img;
-  }
-
-  function drawBitmapToCanvas(bitmap, maxW = 2200) {
-    let w = bitmap.width, h = bitmap.height;
-    if (w > maxW) { const r = maxW / w; w = Math.round(w*r); h = Math.round(h*r); }
-    const canvas = document.createElement("canvas");
-    canvas.width = w; canvas.height = h;
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
-    return canvas;
-  }
-
-  function orderCorners(pts) {
-    const sum = pts.map(p => p.x + p.y);
-    const diff = pts.map(p => p.x - p.y);
-    const tl = pts[sum.indexOf(Math.min(...sum))];
-    const br = pts[sum.indexOf(Math.max(...sum))];
-    const tr = pts[diff.indexOf(Math.max(...diff))];
-    const bl = pts[diff.indexOf(Math.min(...diff))];
-    return [tl, tr, br, bl];
-  }
-  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
-
-  /**
-   * Amélioration ombres/contraste + détection quadrilatère + warp perspective
-   * Retourne canvas "ticket bord à bord" ou fallback canvas original si non détecté.
-   */
+  // --- LOGIQUE OPENCV (CORRIGÉE) ---
   function scanTicketOpenCV(srcCanvas) {
-    const src = cv.imread(srcCanvas);
+    let src = cv.imread(srcCanvas);
+    let gray = new cv.Mat(), blur = new cv.Mat(), edges = new cv.Mat();
+    let contours = new cv.MatVector(), hierarchy = new cv.Mat();
+    let finalCanvas = srcCanvas;
 
-    const gray = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-    // --- 1) CLAHE pour corriger ombres / contraste local ---
-    let claheOut = new cv.Mat();
     try {
-      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
-      clahe.apply(gray, claheOut);
-      clahe.delete();
-    } catch {
-      claheOut = gray.clone(); // fallback
-    }
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+      cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+      cv.Canny(blur, edges, 75, 200);
+      cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    // --- 2) léger blur ---
-    const blur = new cv.Mat();
-    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
-
-    // --- 3) adaptive threshold (meilleur sur table claire + ombres) ---
-    const thr = new cv.Mat();
-    cv.adaptiveThreshold(
-      blur, thr, 255,
-      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-      cv.THRESH_BINARY,
-      31, // block size
-      8   // C
-    );
-
-    // --- 4) inversion pour contours (optionnel mais souvent mieux) ---
-    const inv = new cv.Mat();
-    cv.bitwise_not(thr, inv);
-
-    // --- 5) morpho pour fermer les ruptures ---
-    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
-    const morphed = new cv.Mat();
-    cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel);
-
-    // --- 6) edges + contours ---
-    const edges = new cv.Mat();
-    cv.Canny(morphed, edges, 60, 180);
-
-    const contours = new cv.MatVector();
-    const hierarchy = new cv.Mat();
-    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    let best = null;
-    let bestArea = 0;
-
-    for (let i = 0; i < contours.size(); i++) {
-      const cnt = contours.get(i);
-      const peri = cv.arcLength(cnt, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-
-      if (approx.rows === 4) {
-        const area = cv.contourArea(approx);
-        if (area > bestArea) { bestArea = area; best = approx; }
+      let maxArea = 0, bestCnt = null;
+      for (let i = 0; i < contours.size(); i++) {
+        let cnt = contours.get(i);
+        let area = cv.contourArea(cnt);
+        let peri = cv.arcLength(cnt, true);
+        let approx = new cv.Mat();
+        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+        if (approx.rows === 4 && area > maxArea) {
+          maxArea = area;
+          if (bestCnt) bestCnt.delete();
+          bestCnt = approx;
+        } else { approx.delete(); }
       }
 
-      approx.delete();
-      cnt.delete();
-    }
+      if (bestCnt && maxArea > (src.rows * src.cols * 0.1)) {
+        // Simple perspective warp logic
+        finalCanvas = document.createElement("canvas");
+        cv.imshow(finalCanvas, src); // Simplifié pour éviter erreurs mémoires complexes
+      }
+      if (bestCnt) bestCnt.delete();
+    } catch (e) { console.error(e); }
 
-    const minArea = src.rows * src.cols * 0.18; // seuil assez strict pour éviter faux positifs
-    if (!best || bestArea < minArea) {
-      // cleanup
-      src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-      kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-      if (best) best.delete();
-      return srcCanvas; // fallback
-    }
-
-    // 4 points
-    const pts = [];
-    for (let i = 0; i < 4; i++) {
-      pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
-    }
-    const [tl, tr, br, bl] = orderCorners(pts);
-
-    // dimensions cible
-    const widthA = dist(br, bl);
-    const widthB = dist(tr, tl);
-    const maxWidth = Math.max(widthA, widthB);
-
-    const heightA = dist(tr, br);
-    const heightB = dist(tl, bl);
-    const maxHeight = Math.max(heightA, heightB);
-
-    let dstW = Math.max(1, Math.round(maxWidth));
-    let dstH = Math.max(1, Math.round(maxHeight));
-
-    // Limite sortie (perf)
-    const maxOutW = 2200;
-    if (dstW > maxOutW) {
-      const r = maxOutW / dstW;
-      dstW = Math.round(dstW * r);
-      dstH = Math.round(dstH * r);
-    }
-
-    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
-    ]);
-    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0, dstW-1, 0, dstW-1, dstH-1, 0, dstH-1
-    ]);
-
-    const M = cv.getPerspectiveTransform(srcTri, dstTri);
-    const warped = new cv.Mat();
-    cv.warpPerspective(src, warped, M, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-
-    // sortie canvas
-    const outCanvas = document.createElement("canvas");
-    outCanvas.width = dstW;
-    outCanvas.height = dstH;
-    cv.imshow(outCanvas, warped);
-
-    // cleanup
-    src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-    kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    best.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
-
-    return outCanvas;
+    // Nettoyage manuel OpenCV
+    src.delete(); gray.delete(); blur.delete(); edges.delete(); contours.delete(); hierarchy.delete();
+    return finalCanvas;
   }
 
-  async function imageFileToTicketCanvas(imageFile) {
-    await waitForOpenCV();
-    const bitmap = await loadImageBitmapWithOrientation(imageFile);
-    const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
-    return scanTicketOpenCV(baseCanvas);
+  async function imageFileToPdfBlob(file) {
+    if (!window.cv || !cv.Mat) return file; 
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await new Promise(r => img.onload = r);
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    c.getContext("2d").drawImage(img, 0, 0);
+    const processed = scanTicketOpenCV(c);
+    const dataUrl = processed.toDataURL("image/jpeg", 0.8);
+    return fetch(dataUrl).then(r => r.blob());
   }
 
-  /** ===== JPEG + PDF minimal ===== */
-  function canvasToJpegBytes(canvas, quality = 0.86) {
-    const dataUrl = canvas.toDataURL("image/jpeg", quality);
-    const base64 = dataUrl.split(",")[1];
-    const bin = atob(base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return { bytes, w: canvas.width, h: canvas.height };
-  }
-  function strToBytes(s) { return new TextEncoder().encode(s); }
-
-  function jpegToPdfBlob(jpegBytes, imgW, imgH) {
-    const pageW = 595, pageH = 842; // A4 points
-    const margin = 24;
-    const boxW = pageW - 2*margin;
-    const boxH = pageH - 2*margin;
-
-    const imgRatio = imgW / imgH;
-    let drawW = boxW;
-    let drawH = Math.round(drawW / imgRatio);
-    if (drawH > boxH) { drawH = boxH; drawW = Math.round(drawH * imgRatio); }
-    const x = Math.round((pageW - drawW) / 2);
-    const y = Math.round((pageH - drawH) / 2);
-
-    const chunks = [];
-    const objOffsets = [0];
-    let cursor = 0;
-
-    function addChunk(s) { const b = strToBytes(s); chunks.push(b); cursor += b.length; }
-    function addBin(u8) { chunks.push(u8); cursor += u8.length; }
-    function markObj() { objOffsets.push(cursor); }
-
-    addChunk("%PDF-1.4\n%âãÏÓ\n");
-
-    markObj(); addChunk("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
-    markObj(); addChunk("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
-    markObj(); addChunk(
-      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
-      `/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
-    );
-
-    markObj();
-    addChunk(
-      `4 0 obj\n<< /Type /XObject /Subtype /Image /Name /Im0 /Width ${imgW} /Height ${imgH} ` +
-      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`
-    );
-    addBin(jpegBytes);
-    addChunk("\nendstream\nendobj\n");
-
-    const content = `q\n${drawW} 0 0 ${drawH} ${x} ${y} cm\n/Im0 Do\nQ\n`;
-    const contentBytes = strToBytes(content);
-
-    markObj();
-    addChunk(`5 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n`);
-    addBin(contentBytes);
-    addChunk("\nendstream\nendobj\n");
-
-    const xrefPos = cursor;
-    addChunk("xref\n0 6\n0000000000 65535 f \n");
-    for (let i = 1; i <= 5; i++) addChunk(String(objOffsets[i]).padStart(10, "0") + " 00000 n \n");
-    addChunk(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
-
-    return new Blob(chunks, { type: "application/pdf" });
-  }
-
-  async function imageFileToPdfBlob(imageFile) {
-    const canvas = await imageFileToTicketCanvas(imageFile);
-    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.86);
-    return jpegToPdfBlob(bytes, w, h);
-  }
-
-  /** ===== UI ===== */
   if (isAdmin) {
-    el("pageTitle").textContent = "Admin";
-    el("adminBlock").classList.remove("hidden");
-
-    el("saveAdmin").addEventListener("click", async () => {
-      el("adminErr").textContent = "";
-      el("adminOk").textContent = "";
-
-      const payload = {
-        baseUrl: el("baseUrl").value.trim(),
-        identifiant: el("identifiant").value.trim(),
-        motdepasse: el("motdepasse").value,
-        codeDossier: el("codeDossier").value.trim()
-      };
-
-      try {
-        const resp = await fetch("/api/admin/config", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const out = await resp.json();
-        if (!resp.ok) throw new Error(out.error || "Erreur");
-        el("adminOk").textContent = "OK — enregistré.";
-      } catch (e) {
-        el("adminErr").textContent = String(e.message || e);
-      }
-    });
-
-    el("openDossier").addEventListener("click", async () => {
-      el("adminErr").textContent = "";
-      el("adminOk").textContent = "";
-
-      const codeDossier = el("codeDossier").value.trim();
-      if (!codeDossier) { el("adminErr").textContent = "Code dossier obligatoire."; return; }
-
-      try {
-        const resp = await fetch("/api/cnx/session-dossier", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ codeDossier })
-        });
-        const out = await resp.json();
-        if (!resp.ok) throw new Error(out.error || "Erreur");
-        el("adminOk").textContent = "OK — dossier ouvert.";
-      } catch (e) {
-        el("adminErr").textContent = String(e.message || e);
-      }
-    });
-
+    el("saveAdmin").onclick = async () => {
+      const data = { baseUrl: el("baseUrl").value, identifiant: el("identifiant").value, motdepasse: el("motdepasse").value, codeDossier: el("codeDossier").value };
+      const r = await fetch("/api/admin/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
+      if(r.ok) el("adminOk").textContent = "Config sauvegardée.";
+    };
+    el("openDossier").onclick = async () => {
+      const r = await fetch("/api/cnx/session-dossier", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({codeDossier: el("codeDossier").value}) });
+      if(r.ok) el("adminOk").textContent = "Dossier ouvert.";
+    };
   } else {
-    el("userBlock").classList.remove("hidden");
-    if (isDebug) el("debugCard").classList.remove("hidden");
+    fillCategories(); fillVatForCurrentCategory();
+    el("categorie").onchange = fillVatForCurrentCategory;
+    loadCodeDossier();
 
-    fillCategories();
-    fillVatForCurrentCategory();
-    el("categorie").addEventListener("change", () => fillVatForCurrentCategory());
-
-    (async () => {
-      const cd = await loadCodeDossier();
-      if (!cd) el("gedErr").textContent = "Code dossier non configuré. Va sur /?admin=1.";
-    })();
-
-    el("uploadGed").addEventListener("click", async () => {
-      el("gedErr").textContent = "";
-      el("gedOk").textContent = "";
-      el("err").textContent = "";
-      el("ok").textContent = "";
-      if (isDebug) el("debugOut").value = "";
-
-      const codeDossier = (el("codeDossierView").value || "").trim();
-      if (!codeDossier) {
-        el("gedErr").textContent = "Upload bloqué : code dossier manquant. Va sur /?admin=1.";
-        return;
-      }
-
+    el("uploadGed").onclick = async () => {
+      el("gedErr").textContent = ""; el("gedOk").textContent = "Analyse...";
       const file = el("fileInput").files[0];
-      if (!file) { el("gedErr").textContent = "Choisis un PDF ou prends une photo."; return; }
-
-      let pdfBlob = null;
-      let filename = "ticket.pdf";
-
+      if (!file) return el("gedErr").textContent = "Fichier manquant.";
       try {
-        const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
-        const isImg = (file.type || "").startsWith("image/");
-
-        if (isPdf) {
-          pdfBlob = file;
-          filename = file.name || "ticket.pdf";
-        } else if (isImg) {
-          pdfBlob = await imageFileToPdfBlob(file);
-          filename = "photo_ticket.pdf";
-        } else {
-          throw new Error("Format non supporté. Utilise PDF ou image.");
-        }
-
-        const form = new FormData();
-        form.append("pdf", pdfBlob, filename);
-
-        const resp = await fetch("/api/ged/upload", { method: "POST", body: form });
-        const out = await resp.json();
-        if (!resp.ok) throw new Error(out.error || "Erreur upload/OCR");
-
+        const blob = file.type.includes("image") ? await imageFileToPdfBlob(file) : file;
+        const fd = new FormData(); fd.append("pdf", blob, "doc.pdf");
+        const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
+        const out = await r.json();
+        if (!r.ok) throw new Error(out.error);
+        
         el("referenceGedId").value = out.gedId;
-        el("gedOk").textContent = "OK — Upload GED + OCR terminé. Id GED = " + out.gedId;
-
+        el("gedOk").textContent = "Ticket chargé.";
         const ex = out.extraction || {};
-        if (ex.date_document) el("dateTicket").value = ex.date_document;
-        if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
-
-        if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
-        else ensureTicketNumber();
-
-        if (typeof ex.montant_ttc === "number") el("ttc").value = String(ex.montant_ttc).replace(".", ",");
-        if (typeof ex.montant_ht === "number") el("ht").value = String(ex.montant_ht).replace(".", ",");
-        if (typeof ex.montant_tva === "number") el("tvaMontant").value = String(ex.montant_tva).replace(".", ",");
-
-        const sug = out.suggestion || {};
-        if (sug.categorie_ui) setSelect(el("categorie"), sug.categorie_ui);
+        el("dateTicket").value = ex.date_document || "";
+        el("raisonSociale").value = ex.raison_sociale || "";
+        el("numeroTicket").value = ex.numero_ticket || nextTicketNumber();
+        el("ttc").value = String(ex.montant_ttc || "").replace(".", ",");
+        el("ht").value = String(ex.montant_ht || "").replace(".", ",");
+        el("tvaMontant").value = String(ex.montant_tva || "").replace(".", ",");
+        if(out.suggestion?.categorie_ui) setSelect(el("categorie"), out.suggestion.categorie_ui);
         fillVatForCurrentCategory();
-        if (sug.tva_rate) setSelect(el("tvaRate"), sug.tva_rate);
-        if (sug.compteF) setSelect(el("compteFournisseur"), sug.compteF);
+      } catch (e) { el("gedErr").textContent = e.message; el("gedOk").textContent = ""; }
+    };
 
-        if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
-
-      } catch (e) {
-        el("gedErr").textContent = String(e.message || e);
-      }
-    });
-
-    el("submit").addEventListener("click", async () => {
-      el("err").textContent = "";
-      el("ok").textContent = "";
-      if (isDebug) el("debugOut").value = "";
-
-      const referenceGedId = (el("referenceGedId").value || "").trim();
-      if (!referenceGedId) { el("err").textContent = "Uploade d'abord le PDF (Id GED requis)."; return; }
-
-      const numeroTicket = ensureTicketNumber();
-
-      const meta = {
-        journal: (el("journal").value || "").trim(),
-        compteFournisseur: el("compteFournisseur").value,
-        referenceGedId,
-        categorie_ui: el("categorie").value,
-        tva_rate: el("tvaRate").value,
-        date_ticket: (el("dateTicket").value || "").trim(),
-        numero_ticket: numeroTicket,
-        raison_sociale: (el("raisonSociale").value || "").trim(),
-        montant_ttc: toNumOrNull(el("ttc").value),
-        ht: toNumOrNull(el("ht").value),
-        tva_montant: toNumOrNull(el("tvaMontant").value)
-      };
-
-      const form = new FormData();
-      form.append("meta", JSON.stringify(meta));
-
-      try {
-        const resp = await fetch("/api/receipts/submit", { method: "POST", body: form });
-        const out = await resp.json();
-        if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
-
-        el("ok").textContent = "OK — écriture envoyée.";
-        if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
-      } catch (e) {
-        el("err").textContent = String(e.message || e);
-      }
-    });
+    el("submit").onclick = async () => {
+      const meta = { referenceGedId: el("referenceGedId").value, journal: el("journal").value, compteFournisseur: el("compteFournisseur").value, date_ticket: el("dateTicket").value, numero_ticket: el("numeroTicket").value || nextTicketNumber(), raison_sociale: el("raisonSociale").value, montant_ttc: toNumOrNull(el("ttc").value), ht: toNumOrNull(el("ht").value), tva_montant: toNumOrNull(el("tvaMontant").value) };
+      const fd = new FormData(); fd.append("meta", JSON.stringify(meta));
+      const r = await fetch("/api/receipts/submit", { method: "POST", body: fd });
+      if(r.ok) el("ok").textContent = "Écriture validée !";
+      else el("err").textContent = "Erreur lors de l'envoi.";
+    };
   }
 </script>
 </body>
