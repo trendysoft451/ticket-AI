@@ -234,6 +234,51 @@
   border:0;
   opacity:0;
 }
+    @media (max-width:520px){
+  #debugCard{ display:none !important; }
+}
+    @media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0b1220;
+    --card-bg:#0f172a;
+    --text-main:#e5e7eb;
+    --text-muted:#94a3b8;
+    --border:#1f2a44;
+
+    --shadow:0 10px 22px rgba(0,0,0,.35);
+    --shadow-soft:0 6px 14px rgba(0,0,0,.28);
+  }
+
+  body{ background:var(--bg); color:var(--text-main); }
+
+  input, select, textarea{
+    background:#0b1326;
+    color:var(--text-main);
+    border-color:var(--border);
+  }
+
+  input[readonly]{ background:#0b1326; }
+
+  .card{
+    background:var(--card-bg);
+    border-color:var(--border);
+  }
+
+  .file-drop{
+    background:linear-gradient(180deg, #0f172a 0%, #0b1326 100%);
+    border-color:#334155;
+  }
+
+  .icon-btn{
+    background:#0f172a;
+    border-color:var(--border);
+    color:#e5e7eb; /* l’icône devient claire en dark */
+  }
+
+  /* messages */
+  .error{ background:rgba(220,38,38,.18); border-color:rgba(220,38,38,.35); color:#fecaca; }
+  .success{ background:rgba(5,150,105,.18); border-color:rgba(5,150,105,.35); color:#a7f3d0; }
+}
   </style>
 </head>
 
