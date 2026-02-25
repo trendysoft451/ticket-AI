@@ -44,17 +44,6 @@
       font-weight: 800;
       text-align: center;
       margin-bottom: 30px;
-      letter-spacing: -0.025em;
-    }
-
-    h3 {
-      font-size: 1.1rem;
-      margin-top: 0;
-      margin-bottom: 20px;
-      color: var(--primary);
-      display: flex;
-      align-items: center;
-      gap: 8px;
     }
 
     .card {
@@ -80,24 +69,11 @@
       border-radius: 8px;
       border: 1px solid var(--border);
       font-size: 16px;
-      background-color: #fcfcfd;
       box-sizing: border-box;
-      transition: all 0.2s;
+      background-color: #fcfcfd;
     }
 
-    input:focus, select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-      background-color: #fff;
-    }
-
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-
+    .row { display: flex; flex-wrap: wrap; gap: 16px; }
     .row > div { flex: 1; min-width: 140px; }
 
     button {
@@ -111,97 +87,77 @@
       font-weight: 700;
       font-size: 0.95rem;
       margin-top: 10px;
-      transition: transform 0.1s;
     }
-
-    button:active { transform: scale(0.98); }
 
     .btn-secondary { background: #64748b; }
     .btn-success { background: var(--success); }
-    
-    .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: -10px; margin-bottom: 10px; }
 
-    .error:empty, .success:empty { display: none; }
     .error, .success {
       padding: 12px;
       border-radius: 8px;
       margin-top: 15px;
       font-size: 0.85rem;
       font-weight: 500;
-      animation: fadeIn 0.3s;
     }
     .error { background: #fee2e2; color: var(--error); border: 1px solid #fecaca; }
     .success { background: #ecfdf5; color: var(--success); border: 1px solid #d1fae5; }
 
-    .hidden { display: none; }
+    .error:empty, .success:empty, .hidden { display: none; }
 
     #adminTrigger {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      width: 44px;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-decoration: none;
-      font-size: 20px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      z-index: 100;
+      position: fixed; bottom: 20px; right: 20px;
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 50%; width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      text-decoration: none; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @media (min-width: 600px) { button { width: auto; min-width: 160px; } }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <center><img src="http://www.image-heberg.fr/files/1771946239507659589.png" alt="Logo Tikeo"></center>
-  <h1 id="pageTitle">Gestion des frais</h1>
+  <center><img src="http://www.image-heberg.fr/files/1771946239507659589.png"></center>
+  <h1 id="pageTitle">Tikeo - Frais</h1>
 
   <div id="adminBlock" class="card hidden">
-    <h3>⚙️ Configuration Admin</h3>
-    <label>CNX base URL <input id="baseUrl" placeholder="https://..."></label>
+    <h3>⚙️ Admin</h3>
+    <label>CNX URL <input id="baseUrl" placeholder="https://..."></label>
     <div class="row">
-      <div><label>Identifiant <input id="identifiant"></label></div>
-      <div><label>Mot de passe <input id="motdepasse" type="password"></label></div>
+      <div><label>ID <input id="identifiant"></label></div>
+      <div><label>Pass <input id="motdepasse" type="password"></label></div>
     </div>
-    <label>Code dossier <input id="codeDossier"></label>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:20px;">
-        <button id="saveAdmin">Enregistrer</button>
-        <button id="openDossier" class="btn-success">Ouvrir dossier</button>
-    </div>
+    <label>Code Dossier <input id="codeDossier" placeholder="DA_CONSEIL"></label>
+    <button id="saveAdmin">Sauvegarder</button>
+    <button id="openDossier" class="btn-success">Ouvrir Session Dossier</button>
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
-    <hr style="margin:25px 0; border:0; border-top:1px solid var(--border);">
-    <button onclick="window.location.href='?'" class="btn-secondary">← Retour à l'accueil</button>
+    <hr style="margin:20px 0; border:0; border-top:1px solid var(--border);">
+    <button onclick="window.location.href='?'" class="btn-secondary">Retour</button>
   </div>
 
   <div id="userBlock" class="hidden">
     <div class="card">
-      <h3>1️⃣ Justificatif</h3>
-      <label>Dossier : <input id="codeDossierView" readonly style="border:none; background:transparent; font-weight:bold; width:auto;"></label>
-      <label>Photo ou PDF <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment"></label>
-      <button id="uploadGed">Scanner & Convertir en PDF</button>
+      <h3>1️⃣ Ticket</h3>
+      <label>Code Dossier: <input id="codeDossierView" readonly style="border:none; width:auto; font-weight:bold;"></label>
+      <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
+      <button id="uploadGed">Envoyer & Analyser</button>
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
       <input id="referenceGedId" type="hidden">
     </div>
 
     <div class="card">
-      <h3>2️⃣ Comptabilité</h3>
+      <h3>2️⃣ Écriture</h3>
       <div class="row">
         <div><label>Journal <input id="journal" value="AC"></label></div>
         <div><label>Fournisseur
-            <select id="compteFournisseur">
-              <option value="FREPAS">FREPAS</option><option value="FCARBU">FCARBU</option>
-              <option value="FPARKING">FPARKING</option><option value="FPEAGE">FPEAGE</option>
-              <option value="FDIVERS" selected>FDIVERS</option>
-            </select>
+          <select id="compteFournisseur">
+            <option value="FREPAS">FREPAS</option>
+            <option value="FCARBU">FCARBU</option>
+            <option value="FPARKING">FPARKING</option>
+            <option value="FPEAGE">FPEAGE</option>
+            <option value="FDIVERS" selected>FDIVERS</option>
+          </select>
         </label></div>
       </div>
       <div class="row">
@@ -210,15 +166,15 @@
       </div>
       <div class="row">
         <div><label>Date <input id="dateTicket" type="date"></label></div>
-        <div><label>N° Ticket <input id="numeroTicket" placeholder="T0001"></label></div>
+        <div><label>N° Ticket <input id="numeroTicket"></label></div>
       </div>
-      <label>Raison sociale <input id="raisonSociale" placeholder="ex: TOTAL"></label>
+      <label>Libellé <input id="raisonSociale"></label>
       <div class="row">
-        <div><label>TTC (€) <input id="ttc" inputmode="decimal" placeholder="0,00"></label></div>
-        <div><label>HT (€) <input id="ht" inputmode="decimal" placeholder="0,00"></label></div>
+        <div><label>TTC <input id="ttc" inputmode="decimal"></label></div>
+        <div><label>HT <input id="ht" inputmode="decimal"></label></div>
       </div>
-      <label>TVA (€) <input id="tvaMontant" inputmode="decimal" placeholder="0,00"></label>
-      <button id="submit">Valider l'écriture</button>
+      <label>TVA <input id="tvaMontant" inputmode="decimal"></label>
+      <button id="submit" class="btn-success">Envoyer en Comptabilité</button>
       <div id="err" class="error"></div>
       <div id="ok" class="success"></div>
     </div>
@@ -233,14 +189,9 @@
   const el = (id) => document.getElementById(id);
   const qs = new URLSearchParams(location.search);
   const isAdmin = qs.get("admin") === "1";
-  
-  if (isAdmin) {
-    el("pageTitle").textContent = "Admin";
-    el("adminBlock").classList.remove("hidden");
-    el("adminTrigger").classList.add("hidden");
-  } else {
-    el("userBlock").classList.remove("hidden");
-  }
+
+  if (isAdmin) { el("adminBlock").classList.remove("hidden"); el("adminTrigger").classList.add("hidden"); }
+  else { el("userBlock").classList.remove("hidden"); }
 
   const CATEGORIES = [
     { key: "petites_fournitures", label: "Petites fournitures", vat: ["20","10"] },
@@ -252,169 +203,125 @@
     { key: "parking", label: "Parking", vat: ["20"] }
   ];
 
-  function toNumOrNull(v){
-    const s = String(v || "").trim().replace(",", ".");
-    return s ? Number(s) : null;
-  }
-
-  function setSelect(selectEl, value){
-    const opt = [...selectEl.options].find(o => o.value === value);
-    if (opt) selectEl.value = value;
-  }
-
   function fillCategories(){ el("categorie").innerHTML = CATEGORIES.map(c => `<option value="${c.key}">${c.label}</option>`).join(""); }
-
-  function fillVatForCurrentCategory(){
+  function fillVat(){
     const cat = CATEGORIES.find(c => c.key === el("categorie").value);
     const allowed = cat ? cat.vat : ["20","10","0"];
-    const current = el("tvaRate").value;
     el("tvaRate").innerHTML = allowed.map(v => `<option value="${v}">${v}%</option>`).join("");
-    if (allowed.includes(current)) el("tvaRate").value = current;
+  }
+  el("categorie").onchange = fillVat;
+
+  async function loadConfig(){
+    const r = await fetch("/api/admin/public");
+    const out = await r.json();
+    el("codeDossierView").value = out.codeDossier || "";
   }
 
-  async function loadCodeDossier(){
-    try{
-      const r = await fetch("/api/admin/public");
-      const out = await r.json();
-      el("codeDossierView").value = out.codeDossier || "Non configuré";
-    } catch(e) {}
-  }
-
-  function nextTicketNumber() {
-    const key = "ticket_counter_T";
-    const next = Number(localStorage.getItem(key) || "0") + 1;
-    localStorage.setItem(key, String(next));
-    return "T" + String(next).padStart(4, "0");
-  }
-
-  /** GESTION DES BLOTS PDF (JPEG -> PDF) **/
-  function generateMinimalPDF(jpegBlob, width, height) {
+  // Conversion Image -> PDF pour la GED
+  async function imageToPdfBlob(file) {
     return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = function() {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        c.getContext("2d").drawImage(img, 0, 0);
+        c.toBlob(async (imgBlob) => {
+          const reader = new FileReader();
+          reader.onload = () => {
             const bytes = new Uint8Array(reader.result);
-            const pageW = 595, pageH = 842; // A4
-            const chunks = [];
-            const add = s => chunks.push(new TextEncoder().encode(s));
-            
-            add("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
-            add("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
-            add(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`);
-            add(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.length} >>\nstream\n`);
-            chunks.push(bytes);
-            add("\nendstream\nendobj\n");
-            add(`5 0 obj\n<< /Length 44 >>\nstream\nq 595 0 0 842 0 0 cm /Im0 Do Q\nendstream\nendobj\n`);
-            add("xref\n0 6\n0000000000 65535 f\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n500\n%%EOF");
+            const chunks = [
+              new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n4 0 obj\n<< /Type /XObject /Subtype /Image /Width "+img.width+" /Height "+img.height+" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+bytes.length+" >>\nstream\n"),
+              bytes,
+              new TextEncoder().encode("\nendstream\nendobj\n5 0 obj\n<< /Length 44 >>\nstream\nq 595 0 0 842 0 0 cm /Im0 Do Q\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n500\n%%EOF")
+            ];
             resolve(new Blob(chunks, { type: "application/pdf" }));
-        };
-        reader.readAsArrayBuffer(jpegBlob);
+          };
+          reader.readAsArrayBuffer(imgBlob);
+        }, "image/jpeg", 0.8);
+      };
     });
   }
 
-  function scanTicketOpenCV(srcCanvas) {
-    let src = cv.imread(srcCanvas);
-    let gray = new cv.Mat(), blur = new cv.Mat(), edges = new cv.Mat();
-    let contours = new cv.MatVector(), hierarchy = new cv.Mat();
-    let outCanvas = srcCanvas;
-
-    try {
-      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-      cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
-      cv.Canny(blur, edges, 75, 200);
-      cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-      let maxArea = 0, bestCnt = null;
-      for (let i = 0; i < contours.size(); i++) {
-        let cnt = contours.get(i);
-        let area = cv.contourArea(cnt);
-        let peri = cv.arcLength(cnt, true);
-        let approx = new cv.Mat();
-        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-        if (approx.rows === 4 && area > maxArea) {
-          maxArea = area;
-          if (bestCnt) bestCnt.delete();
-          bestCnt = approx;
-        } else { approx.delete(); }
-        cnt.delete();
-      }
-
-      if (bestCnt && maxArea > (src.rows * src.cols * 0.1)) {
-        outCanvas = document.createElement("canvas");
-        cv.imshow(outCanvas, src); // Rendu simple pour éviter fuite mémoire
-      }
-      if (bestCnt) bestCnt.delete();
-    } catch (e) { console.error(e); }
-
-    src.delete(); gray.delete(); blur.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    return outCanvas;
-  }
+  // --- ACTIONS ---
 
   el("uploadGed").onclick = async () => {
-    el("gedErr").textContent = ""; el("gedOk").textContent = "Préparation du PDF...";
+    el("gedErr").textContent = ""; el("gedOk").textContent = "Analyse...";
     const file = el("fileInput").files[0];
     if (!file) return el("gedErr").textContent = "Fichier manquant.";
     
     try {
-      let finalBlob = file;
-      if (file.type.includes("image")) {
-          if (!window.cv) { el("gedErr").textContent = "OpenCV en cours de chargement..."; return; }
-          const img = new Image();
-          img.src = URL.createObjectURL(file);
-          await new Promise(r => img.onload = r);
-          const c = document.createElement("canvas");
-          c.width = img.width; c.height = img.height;
-          c.getContext("2d").drawImage(img, 0, 0);
-          const processed = scanTicketOpenCV(c);
-          
-          // Conversion Canvas -> JPEG Blob -> PDF Blob
-          const jpegBlob = await new Promise(r => processed.toBlob(r, "image/jpeg", 0.85));
-          finalBlob = await generateMinimalPDF(jpegBlob, processed.width, processed.height);
-          el("gedOk").textContent = "Conversion PDF réussie. Envoi...";
-      }
-
+      const blob = file.type.includes("image") ? await imageToPdfBlob(file) : file;
       const fd = new FormData();
-      fd.append("pdf", finalBlob, "ticket_frais.pdf");
+      fd.append("pdf", blob, "ticket.pdf");
+
       const r = await fetch("/api/ged/upload", { method: "POST", body: fd });
       const out = await r.json();
       if (!r.ok) throw new Error(out.error);
-      
+
       el("referenceGedId").value = out.gedId;
-      el("gedOk").textContent = "PDF envoyé à la GED !";
-      const ex = out.extraction || {};
+      el("gedOk").textContent = "Analyse réussie !";
+      
+      const ex = out.extraction;
       el("dateTicket").value = ex.date_document || "";
       el("raisonSociale").value = ex.raison_sociale || "";
-      el("numeroTicket").value = ex.numero_ticket || nextTicketNumber();
+      el("numeroTicket").value = ex.numero_ticket || "T" + Date.now().toString().slice(-4);
       el("ttc").value = String(ex.montant_ttc || "").replace(".", ",");
       el("ht").value = String(ex.montant_ht || "").replace(".", ",");
       el("tvaMontant").value = String(ex.montant_tva || "").replace(".", ",");
-      if(out.suggestion?.categorie_ui) setSelect(el("categorie"), out.suggestion.categorie_ui);
-      fillVatForCurrentCategory();
-    } catch (e) { el("gedErr").textContent = e.message; el("gedOk").textContent = ""; }
+      
+      if(out.suggestion.categorie_ui) el("categorie").value = out.suggestion.categorie_ui;
+      fillVat();
+      if(out.suggestion.tva_rate) el("tvaRate").value = out.suggestion.tva_rate;
+    } catch (e) { el("gedErr").textContent = e.message; }
   };
 
   el("submit").onclick = async () => {
-    const meta = { referenceGedId: el("referenceGedId").value, journal: el("journal").value, compteFournisseur: el("compteFournisseur").value, date_ticket: el("dateTicket").value, numero_ticket: el("numeroTicket").value || nextTicketNumber(), raison_sociale: el("raisonSociale").value, montant_ttc: toNumOrNull(el("ttc").value), ht: toNumOrNull(el("ht").value), tva_montant: toNumOrNull(el("tvaMontant").value) };
-    const fd = new FormData(); fd.append("meta", JSON.stringify(meta));
-    const r = await fetch("/api/receipts/submit", { method: "POST", body: fd });
-    if(r.ok) el("ok").textContent = "Écriture validée !";
-    else el("err").textContent = "Erreur d'envoi.";
+    el("err").textContent = ""; el("ok").textContent = "";
+    
+    // CONSTRUCTION DU PAYLOAD (Harmonisé avec le Backend)
+    const meta = {
+      journal: el("journal").value,
+      referenceGedId: el("referenceGedId").value,
+      compteFournisseur: el("compteFournisseur").value,
+      categorie_ui: el("categorie").value,
+      tva_rate: el("tvaRate").value,
+      date_ticket: el("dateTicket").value,
+      numero_ticket: el("numeroTicket").value,
+      raison_sociale: el("raisonSociale").value,
+      montant_ttc: el("ttc").value,
+      ht: el("ht").value,
+      tva_montant: el("tvaMontant").value
+    };
+
+    try {
+      const fd = new FormData();
+      fd.append("meta", JSON.stringify(meta)); // Envoi sous forme de string JSON dans FormData
+
+      const r = await fetch("/api/receipts/submit", { 
+        method: "POST", 
+        body: fd 
+      });
+      const out = await r.json();
+      if (!r.ok) throw new Error(out.error);
+      el("ok").textContent = "Écriture envoyée avec succès !";
+    } catch (e) { el("err").textContent = e.message; }
   };
 
-  if (isAdmin) {
-    el("saveAdmin").onclick = async () => {
-      const data = { baseUrl: el("baseUrl").value, identifiant: el("identifiant").value, motdepasse: el("motdepasse").value, codeDossier: el("codeDossier").value };
-      await fetch("/api/admin/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
-      el("adminOk").textContent = "Enregistré.";
-    };
-    el("openDossier").onclick = async () => {
-      await fetch("/api/cnx/session-dossier", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({codeDossier: el("codeDossier").value}) });
-      el("adminOk").textContent = "Session ouverte.";
-    };
-  } else {
-    fillCategories(); fillVatForCurrentCategory();
-    el("categorie").onchange = fillVatForCurrentCategory;
-    loadCodeDossier();
-  }
+  // ADMIN
+  el("saveAdmin").onclick = async () => {
+    const data = { baseUrl: el("baseUrl").value, identifiant: el("identifiant").value, motdepasse: el("motdepasse").value, codeDossier: el("codeDossier").value };
+    await fetch("/api/admin/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
+    el("adminOk").textContent = "Config OK."; loadConfig();
+  };
+
+  el("openDossier").onclick = async () => {
+    const r = await fetch("/api/cnx/session-dossier", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({codeDossier: el("codeDossier").value}) });
+    const out = await r.json();
+    if(r.ok) el("adminOk").textContent = "Session Ouverte."; else el("adminErr").textContent = out.error;
+  };
+
+  fillCategories(); fillVat(); loadConfig();
 </script>
 </body>
 </html>
