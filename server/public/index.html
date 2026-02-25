@@ -90,7 +90,7 @@
       padding:12px 12px;
       border-radius:10px;
       border:1px solid var(--border);
-      font-size:16px; /* évite le zoom iOS */
+      font-size:16px;
       background:#fcfcfd;
       outline:none;
       transition:border-color .15s ease, box-shadow .15s ease, transform .05s ease;
@@ -138,7 +138,6 @@
     button:hover{ background:var(--primary-hover); }
     button:active{ transform:translateY(1px); box-shadow:var(--shadow-soft); }
 
-    /* Ton HTML a un inline style sur openDossier => on force le thème */
     #openDossier{ background:var(--success) !important; }
     #openDossier:hover{ filter:brightness(.95); }
 
@@ -155,7 +154,6 @@
     .success{ background:#ecfdf5; color:var(--success); border-color:#d1fae5; }
     .error:empty, .success:empty, .hidden{ display:none; }
 
-    /* Input file "dropzone" */
     .file-wrap{ margin-top:8px; }
     .file-drop{
       display:block;
@@ -181,12 +179,41 @@
       background:transparent;
     }
 
-    /* Boutons loading */
     button[disabled]{
       opacity:.7;
       cursor:not-allowed;
       filter:saturate(.9);
     }
+
+    /* Titre + action (roue crantée) */
+    .title-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:14px;
+    }
+    .title-row h3{
+      margin:0;
+    }
+    .icon-btn{
+      width:40px;
+      height:40px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#fff;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      box-shadow:var(--shadow-soft);
+      padding:0;
+    }
+    .icon-btn:hover{
+      box-shadow:0 0 0 4px rgba(37,99,235,.10);
+      border-color:rgba(37,99,235,.55);
+    }
+    .icon-btn svg{ width:20px; height:20px; }
 
     @media (max-width:520px){
       .container{ padding:14px; }
@@ -239,7 +266,19 @@
   <div id="userBlock" class="hidden">
 
     <div class="card">
-      <h3>1️⃣ Scannez le ticket ou importez le PDF</h3>
+      <div class="title-row">
+        <h3>1️⃣ Scannez le ticket ou importez le PDF</h3>
+
+        <!-- Bouton réglages => /?admin=1 -->
+        <button class="icon-btn" id="goAdmin" type="button" aria-label="Réglages">
+          <!-- gear icon (inline SVG) -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
+            <path d="M19.4 15a7.9 7.9 0 0 0 .1-2l2-1.2-2-3.4-2.3.6a8 8 0 0 0-1.7-1l-.3-2.4H10.8L10.5 7a8 8 0 0 0-1.7 1L6.5 7.4l-2 3.4 2 1.2a7.9 7.9 0 0 0 .1 2l-2 1.2 2 3.4 2.3-.6a8 8 0 0 0 1.7 1l.3 2.4h4.4l.3-2.4a8 8 0 0 0 1.7-1l2.3.6 2-3.4-2-1.2z"/>
+          </svg>
+        </button>
+      </div>
 
       <label>Code dossier comptable
         <input id="codeDossierView" readonly>
@@ -255,16 +294,13 @@
         <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
       </div>
 
-      <div class="hint"></div>
-
       <button id="uploadGed">Envoyer le ticket</button>
 
       <div id="gedErr" class="error"></div>
       <div id="gedOk" class="success"></div>
 
-      <label>
-        <input id="referenceGedId" readonly>
-      </label>
+      <!-- ✅ ID GED masqué -->
+      <input id="referenceGedId" type="hidden">
     </div>
 
     <div class="card">
@@ -466,50 +502,40 @@
   }
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 
-  /**
-   * Amélioration ombres/contraste + détection quadrilatère + warp perspective
-   * Retourne canvas "ticket bord à bord" ou fallback canvas original si non détecté.
-   */
   function scanTicketOpenCV(srcCanvas) {
     const src = cv.imread(srcCanvas);
 
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-    // --- 1) CLAHE pour corriger ombres / contraste local ---
     let claheOut = new cv.Mat();
     try {
       const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
       clahe.apply(gray, claheOut);
       clahe.delete();
     } catch {
-      claheOut = gray.clone(); // fallback
+      claheOut = gray.clone();
     }
 
-    // --- 2) léger blur ---
     const blur = new cv.Mat();
     cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
 
-    // --- 3) adaptive threshold (meilleur sur table claire + ombres) ---
     const thr = new cv.Mat();
     cv.adaptiveThreshold(
       blur, thr, 255,
       cv.ADAPTIVE_THRESH_GAUSSIAN_C,
       cv.THRESH_BINARY,
-      31, // block size
-      8   // C
+      31,
+      8
     );
 
-    // --- 4) inversion pour contours (optionnel mais souvent mieux) ---
     const inv = new cv.Mat();
     cv.bitwise_not(thr, inv);
 
-    // --- 5) morpho pour fermer les ruptures ---
     const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
     const morphed = new cv.Mat();
     cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel);
 
-    // --- 6) edges + contours ---
     const edges = new cv.Mat();
     cv.Canny(morphed, edges, 60, 180);
 
@@ -520,7 +546,7 @@
     let best = null;
     let bestArea = 0;
 
-    // ✅ FIX: ne pas garder un Mat déjà delete() => clone()
+    // ✅ FIX Mat already deleted : clone()
     for (let i = 0; i < contours.size(); i++) {
       const cnt = contours.get(i);
       const peri = cv.arcLength(cnt, true);
@@ -540,23 +566,20 @@
       cnt.delete();
     }
 
-    const minArea = src.rows * src.cols * 0.18; // seuil assez strict pour éviter faux positifs
+    const minArea = src.rows * src.cols * 0.18;
     if (!best || bestArea < minArea) {
-      // cleanup
       src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
       kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
       if (best) best.delete();
-      return srcCanvas; // fallback
+      return srcCanvas;
     }
 
-    // 4 points
     const pts = [];
     for (let i = 0; i < 4; i++) {
       pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
     }
     const [tl, tr, br, bl] = orderCorners(pts);
 
-    // dimensions cible
     const widthA = dist(br, bl);
     const widthB = dist(tr, tl);
     const maxWidth = Math.max(widthA, widthB);
@@ -568,7 +591,6 @@
     let dstW = Math.max(1, Math.round(maxWidth));
     let dstH = Math.max(1, Math.round(maxHeight));
 
-    // Limite sortie (perf)
     const maxOutW = 2200;
     if (dstW > maxOutW) {
       const r = maxOutW / dstW;
@@ -587,13 +609,11 @@
     const warped = new cv.Mat();
     cv.warpPerspective(src, warped, M, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
 
-    // sortie canvas
     const outCanvas = document.createElement("canvas");
     outCanvas.width = dstW;
     outCanvas.height = dstH;
     cv.imshow(outCanvas, warped);
 
-    // cleanup
     src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
     kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
     best.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
@@ -608,7 +628,6 @@
     return scanTicketOpenCV(baseCanvas);
   }
 
-  /** ===== JPEG + PDF minimal ===== */
   function canvasToJpegBytes(canvas, quality = 0.86) {
     const dataUrl = canvas.toDataURL("image/jpeg", quality);
     const base64 = dataUrl.split(",")[1];
@@ -620,7 +639,7 @@
   function strToBytes(s) { return new TextEncoder().encode(s); }
 
   function jpegToPdfBlob(jpegBytes, imgW, imgH) {
-    const pageW = 595, pageH = 842; // A4 points
+    const pageW = 595, pageH = 842;
     const margin = 24;
     const boxW = pageW - 2*margin;
     const boxH = pageH - 2*margin;
@@ -679,7 +698,6 @@
     return jpegToPdfBlob(bytes, w, h);
   }
 
-  /** ===== UI ===== */
   function setBtnLoading(btn, isLoading, textLoading) {
     if (!btn) return;
     if (isLoading) {
@@ -693,6 +711,30 @@
     }
   }
 
+  function resetAfterSubmit() {
+    // On garde le dossier affiché, et le journal/fournisseur/catégorie/tva si tu veux.
+    // Ici on reset ce qui est lié au ticket et aux montants.
+    el("fileInput").value = "";
+    el("referenceGedId").value = "";
+    el("dateTicket").value = "";
+    el("raisonSociale").value = "";
+    el("ttc").value = "";
+    el("ht").value = "";
+    el("tvaMontant").value = "";
+    el("gedOk").textContent = "";
+    el("gedErr").textContent = "";
+    el("err").textContent = "";
+    el("ok").textContent = "";
+
+    // Nouveau numéro auto prêt pour le prochain ticket
+    el("numeroTicket").value = "";
+    ensureTicketNumber();
+
+    // Remonte en haut (confort mobile)
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // ===== UI =====
   if (isAdmin) {
     el("pageTitle").textContent = "Admin";
     el("adminBlock").classList.remove("hidden");
@@ -753,13 +795,20 @@
     el("userBlock").classList.remove("hidden");
     if (isDebug) el("debugCard").classList.remove("hidden");
 
+    // bouton roue crantée
+    el("goAdmin").addEventListener("click", () => {
+      window.location.href = "/?admin=1";
+    });
+
     fillCategories();
     fillVatForCurrentCategory();
     el("categorie").addEventListener("change", () => fillVatForCurrentCategory());
 
     (async () => {
       const cd = await loadCodeDossier();
-      if (!cd) el("gedErr").textContent = "Code dossier non configuré. Va sur /?admin=1.";
+      if (!cd) el("gedErr").textContent = "Code dossier non configuré. Cliquez sur l’icône réglages.";
+      // prépare un numéro ticket dès l'arrivée (optionnel mais pratique)
+      ensureTicketNumber();
     })();
 
     el("uploadGed").addEventListener("click", async () => {
@@ -771,7 +820,7 @@
 
       const codeDossier = (el("codeDossierView").value || "").trim();
       if (!codeDossier) {
-        el("gedErr").textContent = "Upload bloqué : code dossier manquant. Va sur /?admin=1.";
+        el("gedErr").textContent = "Upload bloqué : code dossier manquant. Cliquez sur l’icône réglages.";
         return;
       }
 
@@ -803,8 +852,8 @@
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur upload/OCR");
 
+        // ✅ ID GED stocké mais non affiché
         el("referenceGedId").value = out.gedId;
-        el("gedOk").textContent = "OK — Upload GED + OCR terminé. Id GED = " + out.gedId;
 
         const ex = out.extraction || {};
         if (ex.date_document) el("dateTicket").value = ex.date_document;
@@ -823,6 +872,10 @@
         if (sug.tva_rate) setSelect(el("tvaRate"), sug.tva_rate);
         if (sug.compteF) setSelect(el("compteFournisseur"), sug.compteF);
 
+        // ✅ Message : uniquement le numéro de ticket
+        const num = String(el("numeroTicket").value || "").trim();
+        el("gedOk").textContent = num ? ("OK — Ticket chargé. N° ticket : " + num) : "OK — Ticket chargé.";
+
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
 
       } catch (e) {
@@ -838,7 +891,7 @@
       if (isDebug) el("debugOut").value = "";
 
       const referenceGedId = (el("referenceGedId").value || "").trim();
-      if (!referenceGedId) { el("err").textContent = "Uploade d'abord le PDF (Id GED requis)."; return; }
+      if (!referenceGedId) { el("err").textContent = "Envoie d'abord le ticket (Étape 1)."; return; }
 
       const numeroTicket = ensureTicketNumber();
 
@@ -866,7 +919,12 @@
         if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
 
         el("ok").textContent = "OK — écriture envoyée.";
+
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
+
+        // ✅ Rafraîchir l'UI après envoi
+        resetAfterSubmit();
+
       } catch (e) {
         el("err").textContent = String(e.message || e);
       } finally {
