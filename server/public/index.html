@@ -565,14 +565,111 @@
     const bl = pts[diff.indexOf(Math.min(...diff))];
     return [tl, tr, br, bl];
   }
-  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+  function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+  /* Fallback minAreaRect -> 4 points (math-safe, sans API incertaine) */
+  function rectPointsFromMinAreaRect(cnt){
+    const rr = cv.minAreaRect(cnt); // {center:{x,y}, size:{width,height}, angle}
+    const cx = rr.center.x, cy = rr.center.y;
+    const w = rr.size.width, h = rr.size.height;
+    const a = (rr.angle || 0) * Math.PI / 180;
+
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const hw = w / 2, hh = h / 2;
+
+    const corners = [
+      {x: -hw, y: -hh},
+      {x:  hw, y: -hh},
+      {x:  hw, y:  hh},
+      {x: -hw, y:  hh},
+    ];
+
+    return corners.map(p => ({
+      x: cx + (p.x * cos - p.y * sin),
+      y: cy + (p.x * sin + p.y * cos),
+    }));
+  }
+
+  /* Auto-crop: enlève les bordures blanches après warp */
+  function autoCropTicketCanvas(canvas, whiteThreshold = 245, margin = 8){
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const w = canvas.width, h = canvas.height;
+    const img = ctx.getImageData(0,0,w,h).data;
+
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let y=0; y<h; y++){
+      for (let x=0; x<w; x++){
+        const i = (y*w + x)*4;
+        const r = img[i], g = img[i+1], b = img[i+2];
+        if (r < whiteThreshold || g < whiteThreshold || b < whiteThreshold){
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    if (maxX < 0) return canvas;
+
+    minX = clamp(minX - margin, 0, w-1);
+    minY = clamp(minY - margin, 0, h-1);
+    maxX = clamp(maxX + margin, 0, w-1);
+    maxY = clamp(maxY + margin, 0, h-1);
+
+    const cw = maxX - minX + 1;
+    const ch = maxY - minY + 1;
+
+    // évite crop trop agressif
+    if (cw < w*0.55 || ch < h*0.55) return canvas;
+
+    const out = document.createElement("canvas");
+    out.width = cw; out.height = ch;
+    out.getContext("2d").drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
+    return out;
+  }
+
+  /* Effet "scan" : fond blanchi + texte renforcé */
+  function enhanceDocumentCanvas(canvas){
+    const src = cv.imread(canvas);
+    const gray = new cv.Mat();
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+    // léger blur pour stabiliser le threshold
+    const blur = new cv.Mat();
+    cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
+
+    const thr = new cv.Mat();
+    cv.adaptiveThreshold(
+      blur, thr, 255,
+      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      cv.THRESH_BINARY,
+      31,
+      10
+    );
+
+    const out = new cv.Mat();
+    cv.cvtColor(thr, out, cv.COLOR_GRAY2RGBA, 0);
+
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = canvas.width;
+    outCanvas.height = canvas.height;
+    cv.imshow(outCanvas, out);
+
+    src.delete(); gray.delete(); blur.delete(); thr.delete(); out.delete();
+    return outCanvas;
+  }
+
+  /* Détection + perspective + nettoyage fond */
   function scanTicketOpenCV(srcCanvas) {
     const src = cv.imread(srcCanvas);
 
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
+    // CLAHE pour ombres / contraste local
     let claheOut = new cv.Mat();
     try {
       const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
@@ -611,8 +708,19 @@
     let best = null;
     let bestArea = 0;
 
+    let bestCnt = null;
+    let bestCntArea = 0;
+
     for (let i = 0; i < contours.size(); i++) {
       const cnt = contours.get(i);
+      const areaCnt = cv.contourArea(cnt);
+
+      if (areaCnt > bestCntArea) {
+        bestCntArea = areaCnt;
+        if (bestCnt) bestCnt.delete();
+        bestCnt = cnt.clone();
+      }
+
       const peri = cv.arcLength(cnt, true);
       const approx = new cv.Mat();
       cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
@@ -631,17 +739,23 @@
     }
 
     const minArea = src.rows * src.cols * 0.18;
-    if (!best || bestArea < minArea) {
+
+    let pts = null;
+
+    if (best && bestArea >= minArea) {
+      pts = [];
+      for (let i = 0; i < 4; i++) pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
+    } else if (bestCnt && bestCntArea >= minArea) {
+      pts = rectPointsFromMinAreaRect(bestCnt);
+    } else {
+      // cleanup
       src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
       kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
       if (best) best.delete();
+      if (bestCnt) bestCnt.delete();
       return srcCanvas;
     }
 
-    const pts = [];
-    for (let i = 0; i < 4; i++) {
-      pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
-    }
     const [tl, tr, br, bl] = orderCorners(pts);
 
     const widthA = dist(br, bl);
@@ -678,11 +792,18 @@
     outCanvas.height = dstH;
     cv.imshow(outCanvas, warped);
 
+    // cleanup mats
     src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
     kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    best.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+    srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+    if (best) best.delete();
+    if (bestCnt) bestCnt.delete();
 
-    return outCanvas;
+    // Effet scan + auto-crop pour "effacer" l'arrière-plan
+    const enhanced = enhanceDocumentCanvas(outCanvas);
+    const cropped = autoCropTicketCanvas(enhanced, 245, 10);
+
+    return cropped;
   }
 
   function canvasToJpegBytes(canvas, quality = 0.86) {
@@ -863,7 +984,6 @@
     (async () => {
       const cd = await loadCodeDossier();
       if (!cd) el("gedErr").textContent = "Code dossier non configuré. Cliquez sur l’icône réglages.";
-      // IMPORTANT: plus d'auto-numérotation ici (évite incrément au refresh)
     })();
 
     el("uploadGed").addEventListener("click", async () => {
@@ -913,7 +1033,7 @@
         if (ex.date_document) el("dateTicket").value = ex.date_document;
         if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
 
-        // IMPORTANT: pas d'auto ici, uniquement si OCR a trouvé un numero_ticket
+        // pas d'auto ici : seulement si OCR a trouvé un numero_ticket
         if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
         else el("numeroTicket").value = "";
 
@@ -953,7 +1073,7 @@
       const existing = String(el("numeroTicket").value || "").trim();
       const wasAuto = !existing;
       const numeroTicket = existing || peekNextTicketNumber();
-      if (wasAuto) el("numeroTicket").value = numeroTicket; // affiche le numéro proposé
+      if (wasAuto) el("numeroTicket").value = numeroTicket;
 
       const meta = {
         journal: (el("journal").value || "").trim(),
@@ -978,7 +1098,6 @@
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
 
-        // Commit compteur UNIQUEMENT si on a auto-généré le ticket et que l'envoi est OK
         if (wasAuto) commitTicketNumberUsed(numeroTicket);
 
         el("ok").textContent = "✅ Écriture envoyée. Rafraîchissement dans 5 secondes…";
