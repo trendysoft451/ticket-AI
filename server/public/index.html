@@ -192,9 +192,8 @@
       gap:12px;
       margin-bottom:14px;
     }
-    .title-row h3{
-      margin:0;
-    }
+    .title-row h3{ margin:0; }
+
     .icon-btn{
       width:40px;
       height:40px;
@@ -223,7 +222,7 @@
       h1{ font-size:1.35rem; }
     }
 
-    /* ✅ Masquer input file natif */
+    /* Masquer input file natif */
     #fileInput{
       position:absolute;
       width:1px;
@@ -237,12 +236,12 @@
       opacity:0;
     }
 
-    /* ✅ Debug masqué en mobile */
+    /* Debug masqué en mobile */
     @media (max-width:520px){
       #debugCard{ display:none !important; }
     }
 
-    /* ✅ Mode sombre auto */
+    /* Mode sombre auto */
     @media (prefers-color-scheme: dark){
       :root{
         --bg:#0b1220;
@@ -321,10 +320,8 @@
     <button id="saveAdmin">Enregistrer</button>
     <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
 
-    <!-- ✅ Retour accueil en admin -->
     <button id="backHome" style="background:#64748b">Retour accueil</button>
 
-    <!-- ✅ RAZ compteur tickets -->
     <button id="resetTicketCounter" style="background:#ef4444">RAZ compteur tickets</button>
 
     <div id="adminErr" class="error"></div>
@@ -411,8 +408,8 @@
           </label>
         </div>
         <div>
-          <label>Numéro ticket (si vide → auto T0001, T0002…)
-            <input id="numeroTicket" placeholder="ex: T0001">
+          <label>Numéro ticket
+            <input id="numeroTicket" placeholder="(auto si vide à la validation)">
           </label>
         </div>
       </div>
@@ -505,19 +502,25 @@
     }
   }
 
-  function nextTicketNumber() {
+  /* ===== Compteur ticket : NE BOUGE QUE SI validation OK ET ticket auto ===== */
+  function getTicketCounter() {
     const key = "ticket_counter_T";
-    const prev = Number(localStorage.getItem(key) || "0");
-    const next = prev + 1;
-    localStorage.setItem(key, String(next));
+    const v = Number(localStorage.getItem(key) || "0");
+    return Number.isFinite(v) && v >= 0 ? v : 0;
+  }
+
+  function peekNextTicketNumber() {
+    const next = getTicketCounter() + 1;
     return "T" + String(next).padStart(4, "0");
   }
-  function ensureTicketNumber() {
-    const v = String(el("numeroTicket").value || "").trim();
-    if (v) return v;
-    const t = nextTicketNumber();
-    el("numeroTicket").value = t;
-    return t;
+
+  // Commit UNIQUEMENT quand l'écriture est validée (succès serveur)
+  function commitTicketNumberUsed(num) {
+    const m = /^T(\d{4,})$/i.exec(String(num || "").trim());
+    if (!m) return;
+    const used = Number(m[1]);
+    if (!Number.isFinite(used)) return;
+    localStorage.setItem("ticket_counter_T", String(used));
   }
 
   function waitForOpenCV(timeoutMs = 12000) {
@@ -781,7 +784,6 @@
       window.location.href = "/?";
     });
 
-    /* ✅ RAZ compteur tickets (ADMIN) */
     el("resetTicketCounter").addEventListener("click", () => {
       el("adminErr").textContent = "";
       el("adminOk").textContent = "";
@@ -861,7 +863,7 @@
     (async () => {
       const cd = await loadCodeDossier();
       if (!cd) el("gedErr").textContent = "Code dossier non configuré. Cliquez sur l’icône réglages.";
-      ensureTicketNumber();
+      // IMPORTANT: plus d'auto-numérotation ici (évite incrément au refresh)
     })();
 
     el("uploadGed").addEventListener("click", async () => {
@@ -911,8 +913,9 @@
         if (ex.date_document) el("dateTicket").value = ex.date_document;
         if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
 
+        // IMPORTANT: pas d'auto ici, uniquement si OCR a trouvé un numero_ticket
         if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
-        else ensureTicketNumber();
+        else el("numeroTicket").value = "";
 
         if (typeof ex.montant_ttc === "number") el("ttc").value = String(ex.montant_ttc).replace(".", ",");
         if (typeof ex.montant_ht === "number") el("ht").value = String(ex.montant_ht).replace(".", ",");
@@ -925,7 +928,7 @@
         if (sug.compteF) setSelect(el("compteFournisseur"), sug.compteF);
 
         const num = String(el("numeroTicket").value || "").trim();
-        el("gedOk").textContent = num ? ("OK — Ticket chargé. N° ticket : " + num) : "OK — Ticket chargé.";
+        el("gedOk").textContent = num ? ("OK — Ticket chargé. N° ticket : " + num) : "OK — Ticket chargé. N° ticket non détecté.";
 
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
       } catch (e) {
@@ -946,7 +949,11 @@
         return;
       }
 
-      const numeroTicket = ensureTicketNumber();
+      // Numéro ticket: auto seulement si vide, sans incrémenter ici
+      const existing = String(el("numeroTicket").value || "").trim();
+      const wasAuto = !existing;
+      const numeroTicket = existing || peekNextTicketNumber();
+      if (wasAuto) el("numeroTicket").value = numeroTicket; // affiche le numéro proposé
 
       const meta = {
         journal: (el("journal").value || "").trim(),
@@ -970,6 +977,9 @@
         const resp = await fetch("/api/receipts/submit", { method: "POST", body: form });
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
+
+        // Commit compteur UNIQUEMENT si on a auto-généré le ticket et que l'envoi est OK
+        if (wasAuto) commitTicketNumberUsed(numeroTicket);
 
         el("ok").textContent = "✅ Écriture envoyée. Rafraîchissement dans 5 secondes…";
         el("err").textContent = "";
