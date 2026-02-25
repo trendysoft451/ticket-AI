@@ -207,7 +207,7 @@
       cursor:pointer;
       box-shadow:var(--shadow-soft);
       padding:0;
-      color:#000; /* ✅ icône noire */
+      color:#000;
     }
     .icon-btn:hover{
       box-shadow:0 0 0 4px rgba(37,99,235,.10);
@@ -222,63 +222,68 @@
       .row > div{ min-width:100%; }
       h1{ font-size:1.35rem; }
     }
+
+    /* ✅ Masquer input file natif */
     #fileInput{
-  position:absolute;
-  width:1px;
-  height:1px;
-  padding:0;
-  margin:-1px;
-  overflow:hidden;
-  clip:rect(0,0,0,0);
-  white-space:nowrap;
-  border:0;
-  opacity:0;
-}
+      position:absolute;
+      width:1px;
+      height:1px;
+      padding:0;
+      margin:-1px;
+      overflow:hidden;
+      clip:rect(0,0,0,0);
+      white-space:nowrap;
+      border:0;
+      opacity:0;
+    }
+
+    /* ✅ Debug masqué en mobile */
     @media (max-width:520px){
-  #debugCard{ display:none !important; }
-}
+      #debugCard{ display:none !important; }
+    }
+
+    /* ✅ Mode sombre auto */
     @media (prefers-color-scheme: dark){
-  :root{
-    --bg:#0b1220;
-    --card-bg:#0f172a;
-    --text-main:#e5e7eb;
-    --text-muted:#94a3b8;
-    --border:#1f2a44;
+      :root{
+        --bg:#0b1220;
+        --card-bg:#0f172a;
+        --text-main:#e5e7eb;
+        --text-muted:#94a3b8;
+        --border:#1f2a44;
 
-    --shadow:0 10px 22px rgba(0,0,0,.35);
-    --shadow-soft:0 6px 14px rgba(0,0,0,.28);
-  }
+        --shadow:0 10px 22px rgba(0,0,0,.35);
+        --shadow-soft:0 6px 14px rgba(0,0,0,.28);
+      }
 
-  body{ background:var(--bg); color:var(--text-main); }
+      body{ background:var(--bg); color:var(--text-main); }
 
-  input, select, textarea{
-    background:#0b1326;
-    color:var(--text-main);
-    border-color:var(--border);
-  }
+      input, select, textarea{
+        background:#0b1326;
+        color:var(--text-main);
+        border-color:var(--border);
+      }
 
-  input[readonly]{ background:#0b1326; }
+      input[readonly]{ background:#0b1326; }
 
-  .card{
-    background:var(--card-bg);
-    border-color:var(--border);
-  }
+      .card{
+        background:var(--card-bg);
+        border-color:var(--border);
+      }
 
-  .file-drop{
-    background:linear-gradient(180deg, #0f172a 0%, #0b1326 100%);
-    border-color:#334155;
-  }
+      .file-drop{
+        background:linear-gradient(180deg, #0f172a 0%, #0b1326 100%);
+        border-color:#334155;
+      }
 
-  .icon-btn{
-    background:#0f172a;
-    border-color:var(--border);
-    color:#e5e7eb; /* l’icône devient claire en dark */
-  }
+      .icon-btn{
+        background:#0f172a;
+        border-color:var(--border);
+        color:#e5e7eb;
+      }
 
-  /* messages */
-  .error{ background:rgba(220,38,38,.18); border-color:rgba(220,38,38,.35); color:#fecaca; }
-  .success{ background:rgba(5,150,105,.18); border-color:rgba(5,150,105,.35); color:#a7f3d0; }
-}
+      .error{ background:rgba(220,38,38,.18); border-color:rgba(220,38,38,.35); color:#fecaca; }
+      .success{ background:rgba(5,150,105,.18); border-color:rgba(5,150,105,.35); color:#a7f3d0; }
+    }
   </style>
 </head>
 
@@ -318,6 +323,9 @@
 
     <!-- ✅ Retour accueil en admin -->
     <button id="backHome" style="background:#64748b">Retour accueil</button>
+
+    <!-- ✅ RAZ compteur tickets -->
+    <button id="resetTicketCounter" style="background:#ef4444">RAZ compteur tickets</button>
 
     <div id="adminErr" class="error"></div>
     <div id="adminOk" class="success"></div>
@@ -773,6 +781,19 @@
       window.location.href = "/?";
     });
 
+    /* ✅ RAZ compteur tickets (ADMIN) */
+    el("resetTicketCounter").addEventListener("click", () => {
+      el("adminErr").textContent = "";
+      el("adminOk").textContent = "";
+      try{
+        if (!confirm("Remettre le compteur tickets à zéro ? (Prochain ticket : T0001)")) return;
+        localStorage.setItem("ticket_counter_T", "0");
+        el("adminOk").textContent = "OK — compteur tickets remis à zéro (prochain : T0001).";
+      }catch(e){
+        el("adminErr").textContent = "Erreur RAZ compteur : " + String(e.message || e);
+      }
+    });
+
     el("saveAdmin").addEventListener("click", async () => {
       el("adminErr").textContent = "";
       el("adminOk").textContent = "";
@@ -950,14 +971,12 @@
         const out = await resp.json();
         if (!resp.ok) throw new Error(out.error || "Erreur envoi écriture");
 
-        // ✅ message succès + refresh 5s
         el("ok").textContent = "✅ Écriture envoyée. Rafraîchissement dans 5 secondes…";
         el("err").textContent = "";
         if (isDebug) el("debugOut").value = JSON.stringify(out, null, 2);
 
         scheduleRefreshIn5s();
       } catch (e) {
-        // ✅ message erreur + refresh 5s
         el("err").textContent = "❌ " + String(e.message || e) + "\nRafraîchissement dans 5 secondes…";
         el("ok").textContent = "";
         scheduleRefreshIn5s();
