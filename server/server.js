@@ -4,29 +4,54 @@ import multer from "multer";
 import fetch from "node-fetch";
 import cors from "cors";
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 
-// Initialisation sécurisée
+// --- CONFIGURATION DES CHEMINS (Correctif pour Render) ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Assurez-vous que votre index.html est dans un dossier nommé 'public'
+const publicDir = path.join(__dirname, "public");
+
+app.use(express.static(publicDir));
+
+// Route racine pour éviter le "Cannot GET /"
+app.get("/", (req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
+
+// --- INITIALISATION GEMINI ---
+// Note: Utilisez 'gemini-1.5-flash' pour éviter l'erreur 404
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const upload = multer({ storage: multer.memoryStorage() });
 
 let runtimeConfig = {
   baseUrl: process.env.CNX_BASE_URL || "",
+  identifiant: process.env.CNX_IDENTIFIANT || "",
+  motdepasse: process.env.CNX_MOTDEPASSE || "",
   codeDossier: process.env.CNX_CODE_DOSSIER || ""
 };
 
+/** Utils */
+function toNumberOrNull(v) {
+  if (v == null || v === "") return null;
+  const x = typeof v === "string" ? parseFloat(v.replace(/\s/g, "").replace(",", ".")) : v;
+  return Number.isFinite(x) ? x : null;
+}
+
+/** ===== ENDPOINT UPLOAD & ANALYSE IA ===== */
 app.post("/api/ged/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) throw new Error("Fichier absent");
 
-    // Correction 404 : On utilise le nom court du modèle
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const prompt = `Analyse ce ticket de caisse. 
+    const prompt = `Analyses ce ticket de caisse. 
     Ignore l'arrière-plan. Extrais les données en JSON :
     {
       "date_document": "YYYY-MM-DD",
@@ -36,7 +61,7 @@ app.post("/api/ged/upload", upload.single("file"), async (req, res) => {
       "montant_tva": 0.00,
       "raison_sociale": "string"
     }
-    Note : Le ticket peut avoir plusieurs taux de TVA, additionne-les (ex: 0.15 + 0.68).`;
+    Note : Le ticket peut avoir plusieurs taux de TVA (ex: 20% et 5.5%), additionne-les tous.`;
 
     const result = await model.generateContent([
       prompt,
@@ -44,12 +69,11 @@ app.post("/api/ged/upload", upload.single("file"), async (req, res) => {
     ]);
 
     const text = result.response.text();
-    // Nettoyage robuste du JSON renvoyé par l'IA
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("L'IA n'a pas renvoyé un format valide");
     const extraction = JSON.parse(jsonMatch[0]);
 
-    // Simuler l'ID GED pour l'exemple ou appeler votre fonction cnxUploadGed
+    // Génération d'un ID temporaire pour le front
     const gedId = "GED_" + crypto.randomUUID().substring(0, 8);
 
     res.json({
@@ -57,17 +81,25 @@ app.post("/api/ged/upload", upload.single("file"), async (req, res) => {
       gedId,
       extraction,
       suggestion: {
-        categorie_ui: "repas_pro", // Valeur par défaut pour Kayser
+        categorie_ui: "repas_pro",
         tva_rate: "10" 
       }
     });
   } catch (e) {
-    console.error("Erreur détaillée :", e);
-    res.status(e.status || 500).json({ 
-        error: e.message,
-        tip: "Vérifiez que votre clé API Gemini est valide et que le modèle gemini-1.5-flash est disponible."
-    });
+    console.error("Erreur Gemini:", e);
+    res.status(500).json({ error: e.message });
   }
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("Serveur prêt sur le port 3000"));
+// --- ADMIN & PUBLIC CONFIG ---
+app.get("/api/admin/public", (req, res) => {
+  res.json({ codeDossier: runtimeConfig.codeDossier });
+});
+
+app.post("/api/admin/config", (req, res) => {
+  runtimeConfig = { ...runtimeConfig, ...req.body };
+  res.json({ ok: true });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Serveur Tikeo prêt sur le port ${PORT}`));
