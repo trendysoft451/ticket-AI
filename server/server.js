@@ -12,21 +12,21 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 
-// --- CONFIGURATION DES CHEMINS (Correctif pour Render) ---
+// --- CONFIGURATION DES CHEMINS ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Assurez-vous que votre index.html est dans un dossier nommé 'public'
+// Votre fichier HTML doit être dans un dossier nommé 'public'
 const publicDir = path.join(__dirname, "public");
 
 app.use(express.static(publicDir));
 
-// Route racine pour éviter le "Cannot GET /"
+// Route racine pour servir l'interface et éviter le "Cannot GET /"
 app.get("/", (req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
 // --- INITIALISATION GEMINI ---
-// Note: Utilisez 'gemini-1.5-flash' pour éviter l'erreur 404
+// Correction 404 : On utilise le nom court 'gemini-1.5-flash'
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -59,9 +59,10 @@ app.post("/api/ged/upload", upload.single("file"), async (req, res) => {
       "montant_ttc": 0.00,
       "montant_ht": 0.00,
       "montant_tva": 0.00,
-      "raison_sociale": "string"
+      "raison_sociale": "string",
+      "mots_cles": []
     }
-    Note : Le ticket peut avoir plusieurs taux de TVA (ex: 20% et 5.5%), additionne-les tous.`;
+    Note : Le ticket peut avoir plusieurs taux de TVA, additionne-les tous.`;
 
     const result = await model.generateContent([
       prompt,
@@ -73,7 +74,7 @@ app.post("/api/ged/upload", upload.single("file"), async (req, res) => {
     if (!jsonMatch) throw new Error("L'IA n'a pas renvoyé un format valide");
     const extraction = JSON.parse(jsonMatch[0]);
 
-    // Génération d'un ID temporaire pour le front
+    // L'ID GED est généré ici pour le suivi, ou via votre appel API CNX habituel
     const gedId = "GED_" + crypto.randomUUID().substring(0, 8);
 
     res.json({
@@ -82,16 +83,17 @@ app.post("/api/ged/upload", upload.single("file"), async (req, res) => {
       extraction,
       suggestion: {
         categorie_ui: "repas_pro",
+        compteF: "FREPAS",
         tva_rate: "10" 
       }
     });
   } catch (e) {
-    console.error("Erreur Gemini:", e);
+    console.error("Erreur détaillée :", e);
     res.status(500).json({ error: e.message });
   }
 });
 
-// --- ADMIN & PUBLIC CONFIG ---
+// --- ADMIN & CONFIG ---
 app.get("/api/admin/public", (req, res) => {
   res.json({ codeDossier: runtimeConfig.codeDossier });
 });
