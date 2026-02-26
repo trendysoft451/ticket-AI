@@ -27,12 +27,21 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_URL = "https://api.openai.com/v1/responses";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
+/** ✅ Cropper (Gemini sidecar) */
+const CROPPER_ENABLED = (() => {
+  const v = String(process.env.CROPPER_ENABLED || "").trim().toLowerCase();
+  if (!v) return false;
+  return ["1", "true", "yes", "on"].includes(v);
+})();
+const CROPPER_URL = String(process.env.CROPPER_URL || "").trim().replace(/\/$/, "");
+const CROPPER_TIMEOUT_MS = Number(process.env.CROPPER_TIMEOUT_MS || "45000");
+
 /** Runtime config (env > admin UI) */
 let runtimeConfig = {
-  baseUrl: process.env.CNX_BASE_URL || "",         // ex: https://isuiteacd.suiteexpert.fr/cnx/api
+  baseUrl: process.env.CNX_BASE_URL || "", // ex: https://isuiteacd.suiteexpert.fr/cnx/api
   identifiant: process.env.CNX_IDENTIFIANT || "",
   motdepasse: process.env.CNX_MOTDEPASSE || "",
-  codeDossier: process.env.CNX_CODE_DOSSIER || ""  // ex: DA_CONSEIL (requis)
+  codeDossier: process.env.CNX_CODE_DOSSIER || "" // ex: DA_CONSEIL (requis)
 };
 
 function required(v, label) {
@@ -69,7 +78,7 @@ function isoDateOnly(d) {
 const VAT = {
   "20": { code_tva: "TN", compte_tva_44566: "44566200" },
   "10": { code_tva: "TI", compte_tva_44566: "44566100" },
-  "0":  { code_tva: "",   compte_tva_44566: "" }
+  "0": { code_tva: "", compte_tva_44566: "" }
 };
 
 function chargesAccount(categoryKey, vatRate) {
@@ -112,12 +121,14 @@ function suggestFromText(text) {
   if (hasAny(["peage", "péage", "asf", "escota", "aprr", "sanef"])) {
     return { categorie_ui: "peages", compteF: "FPEAGE", tva_rate: "20" };
   }
+
   return { categorie_ui: null, compteF: "FDIVERS", tva_rate: null };
 }
 
 function guessVatRateFromAmounts(ht, tva) {
   if (typeof ht !== "number" || !Number.isFinite(ht) || ht <= 0) return null;
   if (typeof tva !== "number" || !Number.isFinite(tva) || tva < 0) return null;
+
   const r = tva / ht;
   if (Math.abs(r - 0.2) < 0.03) return "20";
   if (Math.abs(r - 0.1) < 0.02) return "10";
@@ -130,6 +141,50 @@ async function pdfFirstPageToPng(pdfPath) {
   const outBase = path.join("uploads", crypto.randomUUID());
   await execFileAsync("pdftoppm", ["-f", "1", "-l", "1", "-png", pdfPath, outBase]);
   return `${outBase}-1.png`;
+}
+
+/** ===== Cropper call (PDF -> cropped PDF) ===== */
+function abortAfter(ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return { ctrl, cancel: () => clearTimeout(t) };
+}
+
+async function cropPdfWithService(pdfBuffer, filename = "ticket.pdf") {
+  if (!CROPPER_ENABLED || !CROPPER_URL) return pdfBuffer;
+
+  const boundary = "----CropperBoundary" + crypto.randomUUID().replace(/-/g, "");
+  const parts = [];
+
+  parts.push(
+    Buffer.from(
+      `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="pdf"; filename="${filename.replace(/"/g, "")}"\r\n` +
+        `Content-Type: application/pdf\r\n\r\n`
+    )
+  );
+  parts.push(Buffer.from(pdfBuffer));
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+  const { ctrl, cancel } = abortAfter(CROPPER_TIMEOUT_MS);
+  try {
+    const resp = await fetch(`${CROPPER_URL}/api/crop`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: Buffer.concat(parts),
+      signal: ctrl.signal
+    });
+
+    const out = Buffer.from(await resp.arrayBuffer());
+    if (!resp.ok) {
+      const snippet = out.toString("utf8").slice(0, 800);
+      throw new Error(`Cropper (${resp.status}): ${snippet}`);
+    }
+    if (!out.length) throw new Error("Cropper: PDF vide");
+    return out;
+  } finally {
+    cancel();
+  }
 }
 
 /** ===== OpenAI parsing robuste ===== */
@@ -145,8 +200,11 @@ function parseOpenAIJson(raw) {
   if (i === -1 || j === -1 || j <= i) throw new Error(`OpenAI: JSON introuvable: ${cleaned}`);
 
   const jsonOnly = cleaned.slice(i, j + 1);
-  try { return JSON.parse(jsonOnly); }
-  catch { throw new Error(`OpenAI: JSON invalide: ${jsonOnly}`); }
+  try {
+    return JSON.parse(jsonOnly);
+  } catch {
+    throw new Error(`OpenAI: JSON invalide: ${jsonOnly}`);
+  }
 }
 
 async function openaiExtractFromImage(dataUrl) {
@@ -171,13 +229,15 @@ Règles:
 
   const body = {
     model: OPENAI_MODEL,
-    input: [{
-      role: "user",
-      content: [
-        { type: "input_text", text: prompt },
-        { type: "input_image", image_url: dataUrl }
-      ]
-    }]
+    input: [
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: prompt },
+          { type: "input_image", image_url: dataUrl }
+        ]
+      }
+    ]
   };
 
   const resp = await fetch(OPENAI_URL, {
@@ -232,7 +292,14 @@ async function cnxAuthenticate() {
   const text = await resp.text();
   if (!resp.ok) throw new Error(`Authentification CNX (${resp.status}): ${text}`);
 
-  const out = (() => { try { return JSON.parse(text); } catch { return { raw: text }; } })();
+  const out = (() => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text };
+    }
+  })();
+
   const uuid = out?.UUID || out?.uuid || out?.data?.UUID || out?.data?.uuid || "";
   if (!uuid) throw new Error(`UUID introuvable dans la réponse auth: ${text}`);
 
@@ -271,16 +338,18 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const fileBuf = await fs.readFile(filePath);
 
   const parts = [];
-  parts.push(Buffer.from(
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="idArboGed"\r\n\r\n` +
-    `${String(arboId)}\r\n`
-  ));
-  parts.push(Buffer.from(
-    `--${boundary}\r\n` +
-    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-    `Content-Type: application/pdf\r\n\r\n`
-  ));
+  parts.push(
+    Buffer.from(
+      `--${boundary}\r\n` + `Content-Disposition: form-data; name="idArboGed"\r\n\r\n` + `${String(arboId)}\r\n`
+    )
+  );
+  parts.push(
+    Buffer.from(
+      `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="${String(filename || "ticket.pdf").replace(/"/g, "")}"\r\n` +
+        `Content-Type: application/pdf\r\n\r\n`
+    )
+  );
   parts.push(fileBuf);
   parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
 
@@ -293,7 +362,14 @@ async function cnxUploadGedDocument({ filePath, filename, arboId = 945 }) {
   const text = await resp.text();
   if (!resp.ok) throw new Error(`Upload GED (${resp.status}): ${text}`);
 
-  const out = (() => { try { return JSON.parse(text); } catch { return { raw: text }; } })();
+  const out = (() => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text };
+    }
+  })();
+
   const id = out?.Id || out?.id || out?.data?.Id || out?.data?.id || "";
   if (!id) throw new Error(`Id GED introuvable dans la réponse upload: ${text}`);
 
@@ -327,9 +403,19 @@ async function cnxPostEcriture(ecrituresPayload) {
 
 /** Payload écritures */
 function buildEcriturePayload({
-  journal, referenceGedId, dateTicketISO, numeroTicket,
-  compteFournisseur, raisonSociale, compteCharges,
-  codeTVA, compteTVA44566, ttc, ht, tva, numeroPiece = "001"
+  journal,
+  referenceGedId,
+  dateTicketISO,
+  numeroTicket,
+  compteFournisseur,
+  raisonSociale,
+  compteCharges,
+  codeTVA,
+  compteTVA44566,
+  ttc,
+  ht,
+  tva,
+  numeroPiece = "001"
 }) {
   const dt = new Date(dateTicketISO);
   if (!Number.isFinite(dt.getTime())) throw new Error("dateTicketISO invalide");
@@ -338,13 +424,39 @@ function buildEcriturePayload({
   const jour = dt.getDate();
 
   const lignes = [
-    { jour, numeroPiece, numeroFacture: String(numeroTicket), compte: String(compteFournisseur), libelle: String(raisonSociale), credit: round2(ttc), debit: 0, modeReglement: "" },
-    { jour, numeroPiece, numeroFacture: String(numeroTicket), compte: String(compteCharges), libelle: String(raisonSociale), credit: 0, debit: round2(ht), ...(codeTVA ? { codeTVA: String(codeTVA) } : {}) }
+    {
+      jour,
+      numeroPiece,
+      numeroFacture: String(numeroTicket),
+      compte: String(compteFournisseur),
+      libelle: String(raisonSociale),
+      credit: round2(ttc),
+      debit: 0,
+      modeReglement: ""
+    },
+    {
+      jour,
+      numeroPiece,
+      numeroFacture: String(numeroTicket),
+      compte: String(compteCharges),
+      libelle: String(raisonSociale),
+      credit: 0,
+      debit: round2(ht),
+      ...(codeTVA ? { codeTVA: String(codeTVA) } : {})
+    }
   ];
 
   if (typeof tva === "number" && Number.isFinite(tva) && tva > 0) {
     if (!compteTVA44566) throw new Error("compteTVA44566 manquant");
-    lignes.push({ jour, numeroPiece, numeroFacture: String(numeroTicket), compte: String(compteTVA44566), libelle: String(raisonSociale), credit: 0, debit: round2(tva) });
+    lignes.push({
+      jour,
+      numeroPiece,
+      numeroFacture: String(numeroTicket),
+      compte: String(compteTVA44566),
+      libelle: String(raisonSociale),
+      credit: 0,
+      debit: round2(tva)
+    });
   }
 
   return { journal: String(journal), mois, annee, ReferenceGed: String(referenceGedId), lignesEcriture: lignes };
@@ -384,6 +496,7 @@ app.post("/api/cnx/session-dossier", async (req, res) => {
 app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
   let pdfPath = null;
   let pngPath = null;
+  let processedPath = null;
 
   try {
     if (!req.file) throw new Error("Aucun PDF");
@@ -393,13 +506,33 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
     required(codeDossier, "codeDossier (admin)");
     await cnxOpenDossierSession(codeDossier);
 
+    // ✅ Read original PDF
+    const originalBuf = await fs.readFile(pdfPath);
+
+    // ✅ Cropper preprocess (fallback to original if failure)
+    let pdfBufToUse = originalBuf;
+    if (CROPPER_ENABLED && CROPPER_URL) {
+      try {
+        pdfBufToUse = await cropPdfWithService(originalBuf, req.file.originalname || "ticket.pdf");
+      } catch (e) {
+        console.warn("[cropper] fallback original:", String(e?.message || e));
+        pdfBufToUse = originalBuf;
+      }
+    }
+
+    // ✅ Write processed PDF to disk to reuse existing poppler + upload functions
+    processedPath = path.join("uploads", crypto.randomUUID() + ".pdf");
+    await fs.writeFile(processedPath, pdfBufToUse);
+
+    // ✅ Upload GED with processed PDF
     const gedId = await cnxUploadGedDocument({
-      filePath: pdfPath,
+      filePath: processedPath,
       filename: req.file.originalname || "ticket.pdf",
       arboId: 945
     });
 
-    pngPath = await pdfFirstPageToPng(pdfPath);
+    // ✅ OCR on processed PDF
+    pngPath = await pdfFirstPageToPng(processedPath);
     const pngB64 = await fs.readFile(pngPath, { encoding: "base64" });
     const extraction = await openaiExtractFromImage(`data:image/png;base64,${pngB64}`);
 
@@ -434,6 +567,7 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
     res.status(400).json({ error: String(e.message || e) });
   } finally {
     if (pdfPath) await fs.unlink(pdfPath).catch(() => {});
+    if (processedPath) await fs.unlink(processedPath).catch(() => {});
     if (pngPath) await fs.unlink(pngPath).catch(() => {});
   }
 });
@@ -490,5 +624,8 @@ app.post("/api/receipts/submit", upload.none(), async (req, res) => {
     res.status(400).json({ error: String(e.message || e) });
   }
 });
+
+/** Health */
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.listen(process.env.PORT || 3000, () => console.log("API running"));
