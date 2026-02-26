@@ -168,11 +168,27 @@ async function cnxAuthenticate() {
 
 async function cnxOpenDossierSession(codeDossier) {
   const uuid = await cnxAuthenticate();
-  await fetch(`${getConfig().baseUrl}/v2/sessions/dossier`, {
+  
+  // Nettoyage : on enlève les espaces et on force en MAJUSCULES
+  const cleanCode = String(codeDossier).trim().toUpperCase();
+  
+  const url = `${getConfig().baseUrl.replace(/\/$/, "")}/v2/sessions/dossier`;
+  
+  const resp = await fetch(url, {
     method: "POST",
-    headers: { UUID: uuid, "Content-Type": "application/json-patch+json" },
-    body: JSON.stringify(codeDossier)
+    headers: { 
+      "UUID": uuid, 
+      "Accept": "text/plain",
+      "Content-Type": "application/json-patch+json" // Format requis par ACD v2
+    },
+    // Très important : le code doit être envoyé comme une chaîne JSON pure
+    body: JSON.stringify(cleanCode) 
   });
+
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    throw new Error(`Erreur Dossier (${resp.status}): ${errorText}`);
+  }
 }
 
 /** === ROUTES API === */
