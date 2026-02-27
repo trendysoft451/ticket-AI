@@ -136,10 +136,12 @@ function guessVatRateFromAmounts(ht, tva) {
   return null;
 }
 
-/** ===== PDF -> PNG (poppler) ===== */
+/** ===== PDF -> PNG (poppler) =====
+ * ✅ MODIF: DPI 300 pour améliorer l'OCR
+ */
 async function pdfFirstPageToPng(pdfPath) {
   const outBase = path.join("uploads", crypto.randomUUID());
-  await execFileAsync("pdftoppm", ["-f", "1", "-l", "1", "-png", pdfPath, outBase]);
+  await execFileAsync("pdftoppm", ["-r", "300", "-f", "1", "-l", "1", "-png", pdfPath, outBase]);
   return `${outBase}-1.png`;
 }
 
@@ -519,6 +521,10 @@ app.post("/api/ged/upload", upload.single("pdf"), async (req, res) => {
         pdfBufToUse = originalBuf;
       }
     }
+
+    // ✅ MODIF (optionnel): log pour savoir si le cropper a vraiment modifié le PDF
+    if (pdfBufToUse.length !== originalBuf.length) console.log("Cropper applied ✔");
+    else console.log("Cropper not applied (same size)");
 
     // ✅ Write processed PDF to disk to reuse existing poppler + upload functions
     processedPath = path.join("uploads", crypto.randomUUID() + ".pdf");
