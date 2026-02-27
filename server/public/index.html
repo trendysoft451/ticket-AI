@@ -134,6 +134,7 @@
       font-size:.98rem;
       box-shadow:var(--shadow);
       transition:transform .06s ease, background .15s ease, box-shadow .15s ease, filter .15s ease;
+      touch-action:manipulation;
     }
     button:hover{ background:var(--primary-hover); }
     button:active{ transform:translateY(1px); box-shadow:var(--shadow-soft); }
@@ -207,6 +208,7 @@
       box-shadow:var(--shadow-soft);
       padding:0;
       color:#000;
+      touch-action:manipulation;
     }
     .icon-btn:hover{
       box-shadow:0 0 0 4px rgba(37,99,235,.10);
@@ -222,6 +224,7 @@
       h1{ font-size:1.35rem; }
     }
 
+    /* Masquer input file natif */
     #fileInput{
       position:absolute;
       width:1px;
@@ -235,10 +238,83 @@
       opacity:0;
     }
 
+    /* Debug masqué en mobile */
     @media (max-width:520px){
       #debugCard{ display:none !important; }
     }
 
+    /* =========================
+       ✅ MODAL SCAN NON-BLOQUANT
+       - Overlay cliquable UNIQUEMENT sur le panneau (pas sur tout l'écran)
+       - Le fond est "pass-through" : n'intercepte pas les clics (pointer-events:none)
+       - Option : clic sur fond pour fermer (activable via data-close-backdrop)
+       ========================= */
+    #scanModal.hidden{ display:none !important; }
+
+    #scanModal{
+      position:fixed;
+      inset:0;
+      z-index:9999;
+      /* IMPORTANT: ne bloque pas le front */
+      pointer-events:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    #scanBackdrop{
+      position:absolute;
+      inset:0;
+      background:rgba(0,0,0,.72);
+      /* IMPORTANT: ne bloque pas le front */
+      pointer-events:none;
+    }
+
+    /* Le panneau, lui, est interactif */
+    #scanPanel{
+      position:relative;
+      width:min(96vw,520px);
+      background:var(--card-bg);
+      border-radius:14px;
+      padding:12px;
+      border:1px solid var(--border);
+      /* IMPORTANT: seul le panneau capte les events */
+      pointer-events:auto;
+      box-shadow:var(--shadow);
+    }
+
+    /* Pour autoriser la fermeture en cliquant hors panneau :
+       on active pointer-events sur le backdrop */
+    #scanModal[data-close-backdrop="1"] #scanBackdrop{
+      pointer-events:auto;
+    }
+
+    /* Video container */
+    #scanViewport{
+      position:relative;
+      width:100%;
+      aspect-ratio:3/4;
+      background:#000;
+      border-radius:12px;
+      overflow:hidden;
+    }
+    #scanVideo{
+      position:absolute; inset:0; width:100%; height:100%;
+      object-fit:cover;
+    }
+    #scanOverlay{
+      position:absolute; inset:0; width:100%; height:100%;
+      /* overlay de dessin, doit rester interactif pour rien (juste dessin) */
+      pointer-events:none;
+    }
+
+    .scan-actions{
+      display:flex;
+      gap:10px;
+      margin-top:10px;
+    }
+
+    /* Mode sombre auto */
     @media (prefers-color-scheme: dark){
       :root{
         --bg:#0b1220;
@@ -288,6 +364,7 @@
   <center><img src="http://www.image-heberg.fr/files/1772025987602134325.png" alt="Tikeo.png" /></center>
   <h1 id="pageTitle">Gestion des frais</h1>
 
+  <!-- ADMIN -->
   <div id="adminBlock" class="card hidden">
     <h3>Admin</h3>
 
@@ -324,7 +401,9 @@
     <div id="adminOk" class="success"></div>
   </div>
 
+  <!-- USER -->
   <div id="userBlock" class="hidden">
+
     <div class="card">
       <div class="title-row">
         <h3>1️⃣ Scannez le ticket ou importez le PDF</h3>
@@ -352,6 +431,7 @@
         <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
       </div>
 
+      <!-- ✅ Mode scan live -->
       <button id="openScan" type="button" style="background:#0ea5e9">📷 Mode scan (auto)</button>
 
       <button id="uploadGed">Envoyer le ticket</button>
@@ -443,29 +523,29 @@
   </div>
 </div>
 
-<div id="scanModal" class="hidden" style="
-  position:fixed; inset:0; background:rgba(0,0,0,.72);
-  display:flex; align-items:center; justify-content:center; z-index:9999;
-">
-  <div style="width:min(96vw,520px); background:var(--card-bg); border-radius:14px; padding:12px; border:1px solid var(--border)">
+<!-- ✅ Modal scan live (non-bloquant) -->
+<div id="scanModal" class="hidden" aria-hidden="true">
+  <div id="scanBackdrop" aria-hidden="true"></div>
+
+  <div id="scanPanel" role="dialog" aria-modal="false" aria-label="Scan ticket">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px">
       <strong>Scan ticket</strong>
       <button id="closeScan" type="button" style="width:auto; padding:8px 10px; background:#64748b">Fermer</button>
     </div>
 
-    <div style="position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden">
-      <video id="scanVideo" playsinline autoplay muted
-             style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover"></video>
-      <canvas id="scanOverlay"
-              style="position:absolute; inset:0; width:100%; height:100%"></canvas>
+    <div id="scanViewport">
+      <video id="scanVideo" playsinline autoplay muted></video>
+      <canvas id="scanOverlay"></canvas>
     </div>
 
-    <div style="display:flex; gap:10px; margin-top:10px">
+    <div class="scan-actions">
       <button id="scanSnap" type="button" style="background:#22c55e">Capturer</button>
       <button id="scanRetry" type="button" style="background:#f59e0b">Reprendre</button>
     </div>
 
-    <div id="scanMsg" class="hint" style="margin-top:8px">Place le ticket dans le cadre, capture auto quand stable…</div>
+    <div id="scanMsg" class="hint" style="margin-top:8px">
+      Place le ticket dans le cadre, capture auto quand stable…
+    </div>
   </div>
 </div>
 
@@ -524,6 +604,7 @@
     }
   }
 
+  /* ===== Compteur ticket : NE BOUGE QUE SI validation OK ET ticket auto ===== */
   function getTicketCounter() {
     const key = "ticket_counter_T";
     const v = Number(localStorage.getItem(key) || "0");
@@ -535,6 +616,7 @@
     return "T" + String(next).padStart(4, "0");
   }
 
+  // Commit UNIQUEMENT quand l'écriture est validée (succès serveur)
   function commitTicketNumberUsed(num) {
     const m = /^T(\d{4,})$/i.exec(String(num || "").trim());
     if (!m) return;
@@ -554,28 +636,6 @@
     });
   }
 
-  async function loadImageBitmapWithOrientation(file) {
-    if (window.createImageBitmap) {
-      try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
-      catch { return await createImageBitmap(file); }
-    }
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = url;
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-    URL.revokeObjectURL(url);
-    return img;
-  }
-
-  function drawBitmapToCanvas(bitmap, maxW = 2200) {
-    let w = bitmap.width, h = bitmap.height;
-    if (w > maxW) { const r = maxW / w; w = Math.round(w*r); h = Math.round(h*r); }
-    const canvas = document.createElement("canvas");
-    canvas.width = w; canvas.height = h;
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
-    return canvas;
-  }
-
   function orderCorners(pts) {
     const sum = pts.map(p => p.x + p.y);
     const diff = pts.map(p => p.x - p.y);
@@ -586,9 +646,9 @@
     return [tl, tr, br, bl];
   }
 
-  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
 
+  /* Fallback minAreaRect -> 4 points */
   function rectPointsFromMinAreaRect(cnt){
     const rr = cv.minAreaRect(cnt);
     const cx = rr.center.x, cy = rr.center.y;
@@ -611,307 +671,7 @@
     }));
   }
 
-  function autoCropTicketCanvas(canvas, whiteThreshold = 252, margin = 6){
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    const w = canvas.width, h = canvas.height;
-    const img = ctx.getImageData(0,0,w,h).data;
-
-    let minX = w, minY = h, maxX = -1, maxY = -1;
-    for (let y=0; y<h; y++){
-      for (let x=0; x<w; x++){
-        const i = (y*w + x)*4;
-        const r = img[i], g = img[i+1], b = img[i+2];
-        if (r < whiteThreshold || g < whiteThreshold || b < whiteThreshold){
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-
-    if (maxX < 0) return canvas;
-
-    minX = clamp(minX - margin, 0, w-1);
-    minY = clamp(minY - margin, 0, h-1);
-    maxX = clamp(maxX + margin, 0, w-1);
-    maxY = clamp(maxY + margin, 0, h-1);
-
-    const cw = maxX - minX + 1;
-    const ch = maxY - minY + 1;
-
-    if (cw < w*0.55 || ch < h*0.55) return canvas;
-
-    const out = document.createElement("canvas");
-    out.width = cw; out.height = ch;
-    out.getContext("2d").drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
-    return out;
-  }
-
-  // ✅ IMPORTANT : on retire la binarisation (adaptiveThreshold). OCR préfère une image "photo" propre.
-  function enhanceDocumentCanvas(canvas){
-    const src = cv.imread(canvas);
-
-    const lab = new cv.Mat();
-    cv.cvtColor(src, lab, cv.COLOR_RGBA2Lab, 0);
-
-    const channels = new cv.MatVector();
-    cv.split(lab, channels);
-
-    const L = channels.get(0);
-
-    const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
-    const L2 = new cv.Mat();
-    clahe.apply(L, L2);
-
-    channels.set(0, L2);
-    cv.merge(channels, lab);
-
-    const out = new cv.Mat();
-    cv.cvtColor(lab, out, cv.COLOR_Lab2RGBA, 0);
-
-    const blur = new cv.Mat();
-    cv.GaussianBlur(out, blur, new cv.Size(3,3), 0);
-
-    const outCanvas = document.createElement("canvas");
-    outCanvas.width = canvas.width;
-    outCanvas.height = canvas.height;
-    cv.imshow(outCanvas, blur);
-
-    src.delete(); lab.delete(); out.delete(); blur.delete();
-    clahe.delete(); channels.delete(); L.delete(); L2.delete();
-
-    return outCanvas;
-  }
-
-  function scanTicketOpenCV(srcCanvas) {
-    const src = cv.imread(srcCanvas);
-
-    const gray = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-    let claheOut = new cv.Mat();
-    try {
-      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
-      clahe.apply(gray, claheOut);
-      clahe.delete();
-    } catch {
-      claheOut = gray.clone();
-    }
-
-    const blur = new cv.Mat();
-    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
-
-    const thr = new cv.Mat();
-    cv.adaptiveThreshold(
-      blur, thr, 255,
-      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-      cv.THRESH_BINARY,
-      31,
-      8
-    );
-
-    const inv = new cv.Mat();
-    cv.bitwise_not(thr, inv);
-
-    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
-    const morphed = new cv.Mat();
-    cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel);
-
-    const edges = new cv.Mat();
-    cv.Canny(morphed, edges, 60, 180);
-
-    const contours = new cv.MatVector();
-    const hierarchy = new cv.Mat();
-    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    let best = null;
-    let bestArea = 0;
-
-    let bestCnt = null;
-    let bestCntArea = 0;
-
-    for (let i = 0; i < contours.size(); i++) {
-      const cnt = contours.get(i);
-      const areaCnt = cv.contourArea(cnt);
-
-      if (areaCnt > bestCntArea) {
-        bestCntArea = areaCnt;
-        if (bestCnt) bestCnt.delete();
-        bestCnt = cnt.clone();
-      }
-
-      const peri = cv.arcLength(cnt, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-
-      if (approx.rows === 4) {
-        const area = cv.contourArea(approx);
-        if (area > bestArea) {
-          bestArea = area;
-          if (best) best.delete();
-          best = approx.clone();
-        }
-      }
-
-      approx.delete();
-      cnt.delete();
-    }
-
-    const minArea = src.rows * src.cols * 0.18;
-    let pts = null;
-
-    if (best && bestArea >= minArea) {
-      pts = [];
-      for (let i = 0; i < 4; i++) pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
-    } else if (bestCnt && bestCntArea >= minArea) {
-      pts = rectPointsFromMinAreaRect(bestCnt);
-    } else {
-      src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-      kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-      if (best) best.delete();
-      if (bestCnt) bestCnt.delete();
-      return srcCanvas;
-    }
-
-    const [tl, tr, br, bl] = orderCorners(pts);
-
-    const widthA = dist(br, bl);
-    const widthB = dist(tr, tl);
-    const maxWidth = Math.max(widthA, widthB);
-
-    const heightA = dist(tr, br);
-    const heightB = dist(tl, bl);
-    const maxHeight = Math.max(heightA, heightB);
-
-    let dstW = Math.max(1, Math.round(maxWidth));
-    let dstH = Math.max(1, Math.round(maxHeight));
-
-    const maxOutW = 2200;
-    if (dstW > maxOutW) {
-      const r = maxOutW / dstW;
-      dstW = Math.round(dstW * r);
-      dstH = Math.round(dstH * r);
-    }
-
-    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
-    ]);
-    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0, dstW-1, 0, dstW-1, dstH-1, 0, dstH-1
-    ]);
-
-    const M = cv.getPerspectiveTransform(srcTri, dstTri);
-    const warped = new cv.Mat();
-    cv.warpPerspective(src, warped, M, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-
-    const outCanvas = document.createElement("canvas");
-    outCanvas.width = dstW;
-    outCanvas.height = dstH;
-    cv.imshow(outCanvas, warped);
-
-    src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-    kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
-    if (best) best.delete();
-    if (bestCnt) bestCnt.delete();
-
-    const enhanced = enhanceDocumentCanvas(outCanvas);
-    const cropped = autoCropTicketCanvas(enhanced, 252, 6);
-    return cropped;
-  }
-
-  function canvasToJpegBytes(canvas, quality = 0.92) {
-    const dataUrl = canvas.toDataURL("image/jpeg", quality);
-    const base64 = dataUrl.split(",")[1];
-    const bin = atob(base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return { bytes, w: canvas.width, h: canvas.height };
-  }
-
-  function strToBytes(s) { return new TextEncoder().encode(s); }
-
-  function jpegToPdfBlob(jpegBytes, imgW, imgH) {
-    const pageW = 595, pageH = 842;
-    const margin = 24;
-    const boxW = pageW - 2*margin;
-    const boxH = pageH - 2*margin;
-
-    const imgRatio = imgW / imgH;
-    let drawW = boxW;
-    let drawH = Math.round(drawW / imgRatio);
-    if (drawH > boxH) { drawH = boxH; drawW = Math.round(drawH * imgRatio); }
-    const x = Math.round((pageW - drawW) / 2);
-    const y = Math.round((pageH - drawH) / 2);
-
-    const chunks = [];
-    const objOffsets = [0];
-    let cursor = 0;
-
-    function addChunk(s) { const b = strToBytes(s); chunks.push(b); cursor += b.length; }
-    function addBin(u8) { chunks.push(u8); cursor += u8.length; }
-    function markObj() { objOffsets.push(cursor); }
-
-    addChunk("%PDF-1.4\n%âãÏÓ\n");
-
-    markObj(); addChunk("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
-    markObj(); addChunk("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
-    markObj(); addChunk(
-      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
-      `/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
-    );
-
-    markObj();
-    addChunk(
-      `4 0 obj\n<< /Type /XObject /Subtype /Image /Name /Im0 /Width ${imgW} /Height ${imgH} ` +
-      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`
-    );
-    addBin(jpegBytes);
-    addChunk("\nendstream\nendobj\n");
-
-    const content = `q\n${drawW} 0 0 ${drawH} ${x} ${y} cm\n/Im0 Do\nQ\n`;
-    const contentBytes = strToBytes(content);
-
-    markObj();
-    addChunk(`5 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n`);
-    addBin(contentBytes);
-    addChunk("\nendstream\nendobj\n");
-
-    const xrefPos = cursor;
-    addChunk("xref\n0 6\n0000000000 65535 f \n");
-    for (let i = 1; i <= 5; i++) addChunk(String(objOffsets[i]).padStart(10, "0") + " 00000 n \n");
-    addChunk(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
-
-    return new Blob(chunks, { type: "application/pdf" });
-  }
-
-  async function imageFileToPdfBlob(imageFile) {
-    await waitForOpenCV();
-    const bitmap = await loadImageBitmapWithOrientation(imageFile);
-    const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
-    const canvas = scanTicketOpenCV(baseCanvas);
-    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.92);
-    return jpegToPdfBlob(bytes, w, h);
-  }
-
-  function setBtnLoading(btn, isLoading, textLoading) {
-    if (!btn) return;
-    if (isLoading) {
-      btn.dataset._txt = btn.textContent;
-      btn.textContent = textLoading || "Traitement...";
-      btn.disabled = true;
-    } else {
-      btn.textContent = btn.dataset._txt || btn.textContent;
-      btn.disabled = false;
-      delete btn.dataset._txt;
-    }
-  }
-
-  function scheduleRefreshIn5s() {
-    setTimeout(() => location.reload(), 5000);
-  }
-
+  /* ====== Scan live ====== */
   let scanStream = null;
   let scanRunning = false;
   let scanCapturedPdf = null;
@@ -932,9 +692,21 @@
 
   function showScanModal(show){
     const m = el("scanModal");
-    if (show) m.classList.remove("hidden");
-    else m.classList.add("hidden");
+    if (show){
+      m.classList.remove("hidden");
+      m.setAttribute("aria-hidden", "false");
+      // empêche le scroll du body SANS bloquer les clics (overlay pass-through)
+      document.body.style.overflow = "hidden";
+    } else {
+      m.classList.add("hidden");
+      m.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    }
   }
+
+  // ✅ fermeture optionnelle au clic sur le backdrop
+  el("scanModal").dataset.closeBackdrop = "1";
+  el("scanBackdrop").addEventListener("click", () => stopScanMode());
 
   async function openScanMode(){
     scanCapturedPdf = null;
@@ -1114,6 +886,136 @@
     return quad;
   }
 
+  // ====== PDF build (identique logique, sans modifier back) ======
+  function strToBytes(s) { return new TextEncoder().encode(s); }
+
+  function canvasToJpegBytes(canvas, quality = 0.86) {
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    const base64 = dataUrl.split(",")[1];
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, w: canvas.width, h: canvas.height };
+  }
+
+  function jpegToPdfBlob(jpegBytes, imgW, imgH) {
+    const pageW = 595, pageH = 842;
+    const margin = 24;
+    const boxW = pageW - 2*margin;
+    const boxH = pageH - 2*margin;
+
+    const imgRatio = imgW / imgH;
+    let drawW = boxW;
+    let drawH = Math.round(drawW / imgRatio);
+    if (drawH > boxH) { drawH = boxH; drawW = Math.round(drawH * imgRatio); }
+    const x = Math.round((pageW - drawW) / 2);
+    const y = Math.round((pageH - drawH) / 2);
+
+    const chunks = [];
+    const objOffsets = [0];
+    let cursor = 0;
+
+    function addChunk(s) { const b = strToBytes(s); chunks.push(b); cursor += b.length; }
+    function addBin(u8) { chunks.push(u8); cursor += u8.length; }
+    function markObj() { objOffsets.push(cursor); }
+
+    addChunk("%PDF-1.4\n%âãÏÓ\n");
+
+    markObj(); addChunk("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    markObj(); addChunk("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    markObj(); addChunk(
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
+      `/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
+    );
+
+    markObj();
+    addChunk(
+      `4 0 obj\n<< /Type /XObject /Subtype /Image /Name /Im0 /Width ${imgW} /Height ${imgH} ` +
+      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`
+    );
+    addBin(jpegBytes);
+    addChunk("\nendstream\nendobj\n");
+
+    const content = `q\n${drawW} 0 0 ${drawH} ${x} ${y} cm\n/Im0 Do\nQ\n`;
+    const contentBytes = strToBytes(content);
+
+    markObj();
+    addChunk(`5 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n`);
+    addBin(contentBytes);
+    addChunk("\nendstream\nendobj\n");
+
+    const xrefPos = cursor;
+    addChunk("xref\n0 6\n0000000000 65535 f \n");
+    for (let i = 1; i <= 5; i++) addChunk(String(objOffsets[i]).padStart(10, "0") + " 00000 n \n");
+    addChunk(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+
+    return new Blob(chunks, { type: "application/pdf" });
+  }
+
+  function enhanceDocumentCanvas(canvas){
+    const src = cv.imread(canvas);
+    const gray = new cv.Mat();
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+    const blur = new cv.Mat();
+    cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
+
+    const thr = new cv.Mat();
+    cv.adaptiveThreshold(
+      blur, thr, 255,
+      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+      cv.THRESH_BINARY,
+      31,
+      10
+    );
+
+    const out = new cv.Mat();
+    cv.cvtColor(thr, out, cv.COLOR_GRAY2RGBA, 0);
+
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = canvas.width;
+    outCanvas.height = canvas.height;
+    cv.imshow(outCanvas, out);
+
+    src.delete(); gray.delete(); blur.delete(); thr.delete(); out.delete();
+    return outCanvas;
+  }
+
+  function autoCropTicketCanvas(canvas, whiteThreshold = 245, margin = 8){
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const w = canvas.width, h = canvas.height;
+    const img = ctx.getImageData(0,0,w,h).data;
+
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let y=0; y<h; y++){
+      for (let x=0; x<w; x++){
+        const i = (y*w + x)*4;
+        const r = img[i], g = img[i+1], b = img[i+2];
+        if (r < whiteThreshold || g < whiteThreshold || b < whiteThreshold){
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return canvas;
+
+    minX = clamp(minX - margin, 0, w-1);
+    minY = clamp(minY - margin, 0, h-1);
+    maxX = clamp(maxX + margin, 0, w-1);
+    maxY = clamp(maxY + margin, 0, h-1);
+
+    const cw = maxX - minX + 1;
+    const ch = maxY - minY + 1;
+    if (cw < w*0.55 || ch < h*0.55) return canvas;
+
+    const out = document.createElement("canvas");
+    out.width = cw; out.height = ch;
+    out.getContext("2d").drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
+    return out;
+  }
+
   async function captureAndBuildPdfFromVideo(quadVideoCoords){
     const v = scan.video;
     const vw = v.videoWidth, vh = v.videoHeight;
@@ -1122,7 +1024,7 @@
     baseCanvas.width = vw; baseCanvas.height = vh;
     baseCanvas.getContext("2d").drawImage(v, 0,0, vw,vh);
 
-    const tl = quadVideoCoords[0], tr = quadVideoCoords[1], br = quadVideoCoords[2], bl = quadVideoCoords[3];
+    const [tl, tr, br, bl] = quadVideoCoords;
     const widthA = Math.hypot(br.x-bl.x, br.y-bl.y);
     const widthB = Math.hypot(tr.x-tl.x, tr.y-tl.y);
     const heightA = Math.hypot(tr.x-br.x, tr.y-br.y);
@@ -1151,9 +1053,9 @@
     src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
 
     const enhanced = enhanceDocumentCanvas(warpedCanvas);
-    const cropped = autoCropTicketCanvas(enhanced, 252, 6);
+    const cropped = autoCropTicketCanvas(enhanced, 245, 10);
 
-    const { bytes, w, h } = canvasToJpegBytes(cropped, 0.92);
+    const { bytes, w, h } = canvasToJpegBytes(cropped, 0.86);
     scanCapturedPdf = jpegToPdfBlob(bytes, w, h);
     scanCapturedName = "photo_ticket.pdf";
   }
@@ -1209,6 +1111,26 @@
     scan.rafId = requestAnimationFrame(scanLoop);
   }
 
+  function setBtnLoading(btn, isLoading, textLoading) {
+    if (!btn) return;
+    if (isLoading) {
+      btn.dataset._txt = btn.textContent;
+      btn.textContent = textLoading || "Traitement...";
+      btn.disabled = true;
+    } else {
+      btn.textContent = btn.dataset._txt || btn.textContent;
+      btn.disabled = false;
+      delete btn.dataset._txt;
+    }
+  }
+
+  function scheduleRefreshIn5s() {
+    setTimeout(() => location.reload(), 5000);
+  }
+
+  // ===========================
+  // UI scan handlers
+  // ===========================
   el("openScan").addEventListener("click", async () => {
     el("gedErr").textContent = "";
     try{
@@ -1246,10 +1168,14 @@
     }
   });
 
+  // stop cam on navigation away
   window.addEventListener("beforeunload", () => {
     try { stopScanMode(); } catch {}
   });
 
+  // ===========================
+  // App main
+  // ===========================
   if (isAdmin) {
     el("pageTitle").textContent = "Admin";
     el("adminBlock").classList.remove("hidden");
@@ -1373,10 +1299,9 @@
             pdfBlob = file;
             filename = file.name || "ticket.pdf";
           } else if (isImg) {
-            pdfBlob = await imageFileToPdfBlob(file);
-            filename = "photo_ticket.pdf";
+            throw new Error("Pour les images, utilise Mode scan (auto) ou convertis en PDF.");
           } else {
-            throw new Error("Format non supporté. Utilise PDF ou image.");
+            throw new Error("Format non supporté. Utilise PDF ou Mode scan.");
           }
         }
 
