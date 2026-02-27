@@ -1,4 +1,4 @@
-  <!doctype html>
+<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
@@ -358,6 +358,9 @@
         <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
       </div>
 
+      <!-- ✅ Nouveau: Mode scan live -->
+      <button id="openScan" type="button" style="background:#0ea5e9">📷 Mode scan (auto)</button>
+
       <button id="uploadGed">Envoyer le ticket</button>
 
       <div id="gedErr" class="error"></div>
@@ -444,6 +447,33 @@
       <h3>Debug (/?debug=1)</h3>
       <textarea id="debugOut" readonly></textarea>
     </div>
+  </div>
+</div>
+
+<!-- ✅ Modal scan live -->
+<div id="scanModal" class="hidden" style="
+  position:fixed; inset:0; background:rgba(0,0,0,.72);
+  display:flex; align-items:center; justify-content:center; z-index:9999;
+">
+  <div style="width:min(96vw,520px); background:var(--card-bg); border-radius:14px; padding:12px; border:1px solid var(--border)">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px">
+      <strong>Scan ticket</strong>
+      <button id="closeScan" type="button" style="width:auto; padding:8px 10px; background:#64748b">Fermer</button>
+    </div>
+
+    <div style="position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden">
+      <video id="scanVideo" playsinline autoplay muted
+             style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover"></video>
+      <canvas id="scanOverlay"
+              style="position:absolute; inset:0; width:100%; height:100%"></canvas>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:10px">
+      <button id="scanSnap" type="button" style="background:#22c55e">Capturer</button>
+      <button id="scanRetry" type="button" style="background:#f59e0b">Reprendre</button>
+    </div>
+
+    <div id="scanMsg" class="hint" style="margin-top:8px">Place le ticket dans le cadre, capture auto quand stable…</div>
   </div>
 </div>
 
@@ -662,7 +692,7 @@
     return outCanvas;
   }
 
-  /* Détection + perspective + nettoyage fond */
+  /* Détection + perspective + nettoyage fond (sur image importée) */
   function scanTicketOpenCV(srcCanvas) {
     const src = cv.imread(srcCanvas);
 
@@ -897,6 +927,349 @@
     setTimeout(() => location.reload(), 5000);
   }
 
+  // ===========================
+  // ✅ Mode Scan live (niveau 3)
+  // ===========================
+  let scanStream = null;
+  let scanRunning = false;
+  let scanCapturedPdf = null;
+  let scanCapturedName = "photo_ticket.pdf";
+
+  const scan = {
+    video: null,
+    overlay: null,
+    msg: null,
+    lastQuad: null,
+    stableCount: 0,
+    rafId: 0,
+    downW: 720,
+    stableFrames: 10,
+    jitterPx: 14,
+    minAreaRatio: 0.20,
+  };
+
+  function showScanModal(show){
+    const m = el("scanModal");
+    if (show) m.classList.remove("hidden");
+    else m.classList.add("hidden");
+  }
+
+  async function openScanMode(){
+    scanCapturedPdf = null;
+
+    scan.video = el("scanVideo");
+    scan.overlay = el("scanOverlay");
+    scan.msg = el("scanMsg");
+    scan.lastQuad = null;
+    scan.stableCount = 0;
+
+    showScanModal(true);
+
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false
+    });
+
+    scan.video.srcObject = scanStream;
+    await scan.video.play();
+
+    resizeOverlayToVideo();
+
+    scanRunning = true;
+    scan.msg.textContent = "Recherche du ticket…";
+    scan.rafId = requestAnimationFrame(scanLoop);
+  }
+
+  function stopScanMode(){
+    scanRunning = false;
+    if (scan.rafId) cancelAnimationFrame(scan.rafId);
+    scan.rafId = 0;
+
+    if (scanStream){
+      scanStream.getTracks().forEach(t => t.stop());
+      scanStream = null;
+    }
+    showScanModal(false);
+  }
+
+  function resizeOverlayToVideo(){
+    const v = scan.video;
+    const c = scan.overlay;
+    if (!v || !c) return;
+    const vw = v.videoWidth || 720;
+    const vh = v.videoHeight || 1280;
+    c.width = vw;
+    c.height = vh;
+  }
+
+  function drawOverlay(quad, statusText){
+    const ctx = scan.overlay.getContext("2d");
+    const w = scan.overlay.width, h = scan.overlay.height;
+    ctx.clearRect(0,0,w,h);
+
+    ctx.fillStyle = "rgba(0,0,0,.25)";
+    ctx.fillRect(0,0,w,h);
+
+    if (!quad){
+      scan.msg.textContent = statusText || "Aucun contour net…";
+      return;
+    }
+
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.moveTo(quad[0].x, quad[0].y);
+    for (let i=1;i<4;i++) ctx.lineTo(quad[i].x, quad[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = (scan.stableCount >= scan.stableFrames) ? "rgba(34,197,94,.95)" : "rgba(14,165,233,.95)";
+    ctx.beginPath();
+    ctx.moveTo(quad[0].x, quad[0].y);
+    for (let i=1;i<4;i++) ctx.lineTo(quad[i].x, quad[i].y);
+    ctx.closePath();
+    ctx.stroke();
+
+    scan.msg.textContent = statusText || (scan.stableCount >= scan.stableFrames
+      ? "Stable ✓ Capture…"
+      : `Stabilisation… (${scan.stableCount}/${scan.stableFrames})`);
+  }
+
+  function quadArea(quad){
+    let a = 0;
+    for (let i=0;i<4;i++){
+      const p = quad[i], q = quad[(i+1)%4];
+      a += p.x*q.y - q.x*p.y;
+    }
+    return Math.abs(a)/2;
+  }
+
+  function quadJitter(q1, q2){
+    if (!q1 || !q2) return 1e9;
+    let s = 0;
+    for (let i=0;i<4;i++){
+      const dx = q1[i].x - q2[i].x;
+      const dy = q1[i].y - q2[i].y;
+      s += Math.hypot(dx,dy);
+    }
+    return s/4;
+  }
+
+  function emaQuad(prev, next, alpha=0.35){
+    if (!prev) return next;
+    return prev.map((p,i)=>({
+      x: p.x*(1-alpha) + next[i].x*alpha,
+      y: p.y*(1-alpha) + next[i].y*alpha
+    }));
+  }
+
+  function detectQuadLiveFromVideoFrame(){
+    const v = scan.video;
+    const vw = v.videoWidth, vh = v.videoHeight;
+    if (!vw || !vh) return null;
+
+    const targetW = scan.downW;
+    const r = targetW / vw;
+    const dw = targetW;
+    const dh = Math.round(vh * r);
+
+    const tmp = document.createElement("canvas");
+    tmp.width = dw; tmp.height = dh;
+    tmp.getContext("2d").drawImage(v, 0,0, dw,dh);
+
+    const src = cv.imread(tmp);
+    const gray = new cv.Mat();
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+    const blur = new cv.Mat();
+    cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
+
+    const thr = new cv.Mat();
+    cv.adaptiveThreshold(blur, thr, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 31, 10);
+    const inv = new cv.Mat();
+    cv.bitwise_not(thr, inv);
+
+    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5,5));
+    const morphed = new cv.Mat();
+    cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel, new cv.Point(-1,-1), 2);
+
+    const edges = new cv.Mat();
+    cv.Canny(morphed, edges, 60, 180);
+
+    const contours = new cv.MatVector();
+    const hierarchy = new cv.Mat();
+    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+    let bestCnt = null;
+    let bestArea = 0;
+    for (let i=0;i<contours.size();i++){
+      const cnt = contours.get(i);
+      const area = cv.contourArea(cnt);
+      if (area > bestArea){
+        bestArea = area;
+        if (bestCnt) bestCnt.delete();
+        bestCnt = cnt.clone();
+      }
+      cnt.delete();
+    }
+
+    src.delete(); gray.delete(); blur.delete(); thr.delete(); inv.delete();
+    kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
+
+    if (!bestCnt) return null;
+
+    const minArea = (dw*dh) * scan.minAreaRatio;
+    if (bestArea < minArea){
+      bestCnt.delete();
+      return null;
+    }
+
+    const pts = rectPointsFromMinAreaRect(bestCnt);
+    bestCnt.delete();
+
+    const scaleBack = vw / dw;
+    const quad = orderCorners(pts.map(p => ({ x: p.x*scaleBack, y: p.y*scaleBack })));
+    return quad;
+  }
+
+  async function captureAndBuildPdfFromVideo(quadVideoCoords){
+    const v = scan.video;
+    const vw = v.videoWidth, vh = v.videoHeight;
+
+    const baseCanvas = document.createElement("canvas");
+    baseCanvas.width = vw; baseCanvas.height = vh;
+    baseCanvas.getContext("2d").drawImage(v, 0,0, vw,vh);
+
+    const tl = quadVideoCoords[0], tr = quadVideoCoords[1], br = quadVideoCoords[2], bl = quadVideoCoords[3];
+    const widthA = Math.hypot(br.x-bl.x, br.y-bl.y);
+    const widthB = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+    const heightA = Math.hypot(tr.x-br.x, tr.y-br.y);
+    const heightB = Math.hypot(tl.x-bl.x, tl.y-bl.y);
+
+    let outW = Math.max(1, Math.round(Math.max(widthA, widthB)));
+    let outH = Math.max(1, Math.round(Math.max(heightA, heightB)));
+    if (outW > 2200){ const rr = 2200/outW; outW = Math.round(outW*rr); outH = Math.round(outH*rr); }
+
+    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
+    ]);
+    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      0, 0, outW-1, 0, outW-1, outH-1, 0, outH-1
+    ]);
+
+    const src = cv.imread(baseCanvas);
+    const M = cv.getPerspectiveTransform(srcTri, dstTri);
+    const warped = new cv.Mat();
+    cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
+
+    const warpedCanvas = document.createElement("canvas");
+    warpedCanvas.width = outW; warpedCanvas.height = outH;
+    cv.imshow(warpedCanvas, warped);
+
+    src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+
+    const enhanced = enhanceDocumentCanvas(warpedCanvas);
+    const cropped = autoCropTicketCanvas(enhanced, 245, 10);
+
+    const { bytes, w, h } = canvasToJpegBytes(cropped, 0.86);
+    scanCapturedPdf = jpegToPdfBlob(bytes, w, h);
+    scanCapturedName = "photo_ticket.pdf";
+  }
+
+  async function scanLoop(){
+    if (!scanRunning) return;
+
+    if (!window.cv || !cv.Mat){
+      drawOverlay(null, "OpenCV.js non prêt…");
+      scan.rafId = requestAnimationFrame(scanLoop);
+      return;
+    }
+
+    if (scan.overlay.width !== scan.video.videoWidth) resizeOverlayToVideo();
+
+    const quad = detectQuadLiveFromVideoFrame();
+
+    if (!quad){
+      scan.lastQuad = null;
+      scan.stableCount = 0;
+      drawOverlay(null, "Ajuste le ticket dans le champ…");
+      scan.rafId = requestAnimationFrame(scanLoop);
+      return;
+    }
+
+    const smooth = emaQuad(scan.lastQuad, quad, 0.35);
+    const jit = quadJitter(scan.lastQuad, smooth);
+
+    const area = quadArea(smooth);
+    const frameArea = scan.video.videoWidth * scan.video.videoHeight;
+    const areaOk = area > frameArea * scan.minAreaRatio;
+
+    const stable = areaOk && jit < scan.jitterPx;
+
+    scan.stableCount = stable ? (scan.stableCount + 1) : 0;
+    scan.lastQuad = smooth;
+
+    drawOverlay(smooth);
+
+    if (scan.stableCount >= scan.stableFrames){
+      scanRunning = false;
+      try{
+        await captureAndBuildPdfFromVideo(smooth);
+        drawOverlay(smooth, "Capture OK ✓");
+        scan.msg.textContent = "Capture OK ✓ Tu peux fermer et envoyer.";
+      }catch(e){
+        scan.msg.textContent = "Erreur capture: " + String(e.message || e);
+        scanRunning = true;
+        scan.stableCount = 0;
+      }
+    }
+
+    scan.rafId = requestAnimationFrame(scanLoop);
+  }
+
+  // UI scan handlers
+  el("openScan").addEventListener("click", async () => {
+    el("gedErr").textContent = "";
+    try{
+      await waitForOpenCV();
+      await openScanMode();
+    }catch(e){
+      el("gedErr").textContent = "Caméra impossible : " + String(e.message || e);
+      stopScanMode();
+    }
+  });
+
+  el("closeScan").addEventListener("click", () => stopScanMode());
+
+  el("scanRetry").addEventListener("click", () => {
+    if (!scanStream) return;
+    scanCapturedPdf = null;
+    scan.lastQuad = null;
+    scan.stableCount = 0;
+    scanRunning = true;
+    scan.rafId = requestAnimationFrame(scanLoop);
+    el("scanMsg").textContent = "Recherche du ticket…";
+  });
+
+  el("scanSnap").addEventListener("click", async () => {
+    if (!scan.lastQuad){
+      el("scanMsg").textContent = "Aucun ticket détecté.";
+      return;
+    }
+    try{
+      await captureAndBuildPdfFromVideo(scan.lastQuad);
+      el("scanMsg").textContent = "Capture OK ✓";
+      drawOverlay(scan.lastQuad, "Capture OK ✓");
+    }catch(e){
+      el("scanMsg").textContent = "Erreur capture: " + String(e.message || e);
+    }
+  });
+
+  // stop cam on navigation away
+  window.addEventListener("beforeunload", () => {
+    try { stopScanMode(); } catch {}
+  });
+
   if (isAdmin) {
     el("pageTitle").textContent = "Admin";
     el("adminBlock").classList.remove("hidden");
@@ -1000,24 +1373,31 @@
       }
 
       const file = el("fileInput").files[0];
-      if (!file) { el("gedErr").textContent = "Choisis un PDF ou prends une photo."; return; }
+      const hasScanPdf = !!scanCapturedPdf;
+
+      if (!file && !hasScanPdf) { el("gedErr").textContent = "Choisis un PDF / photo ou utilise Mode scan."; return; }
 
       let pdfBlob = null;
       let filename = "ticket.pdf";
 
       setBtnLoading(el("uploadGed"), true, "Analyse / OCR...");
       try {
-        const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
-        const isImg = (file.type || "").startsWith("image/");
-
-        if (isPdf) {
-          pdfBlob = file;
-          filename = file.name || "ticket.pdf";
-        } else if (isImg) {
-          pdfBlob = await imageFileToPdfBlob(file);
-          filename = "photo_ticket.pdf";
+        if (hasScanPdf) {
+          pdfBlob = scanCapturedPdf;
+          filename = scanCapturedName || "photo_ticket.pdf";
         } else {
-          throw new Error("Format non supporté. Utilise PDF ou image.");
+          const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
+          const isImg = (file.type || "").startsWith("image/");
+
+          if (isPdf) {
+            pdfBlob = file;
+            filename = file.name || "ticket.pdf";
+          } else if (isImg) {
+            pdfBlob = await imageFileToPdfBlob(file);
+            filename = "photo_ticket.pdf";
+          } else {
+            throw new Error("Format non supporté. Utilise PDF ou image.");
+          }
         }
 
         const form = new FormData();
@@ -1033,7 +1413,6 @@
         if (ex.date_document) el("dateTicket").value = ex.date_document;
         if (ex.raison_sociale) el("raisonSociale").value = ex.raison_sociale;
 
-        // pas d'auto ici : seulement si OCR a trouvé un numero_ticket
         if (ex.numero_ticket) el("numeroTicket").value = ex.numero_ticket;
         else el("numeroTicket").value = "";
 
@@ -1069,7 +1448,6 @@
         return;
       }
 
-      // Numéro ticket: auto seulement si vide, sans incrémenter ici
       const existing = String(el("numeroTicket").value || "").trim();
       const wasAuto = !existing;
       const numeroTicket = existing || peekNextTicketNumber();
