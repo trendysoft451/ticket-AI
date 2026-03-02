@@ -331,7 +331,6 @@
     <button id="openDossier" style="background:#28a745;margin-left:8px">Ouvrir dossier</button>
 
     <button id="backHome" style="background:#64748b">Retour accueil</button>
-
     <button id="resetTicketCounter" style="background:#ef4444">RAZ compteur tickets</button>
 
     <div id="adminErr" class="error"></div>
@@ -369,7 +368,6 @@
       </div>
 
       <button id="openScan" type="button" style="background:#0ea5e9">📷 Mode scan (manuel)</button>
-
       <button id="uploadGed">Envoyer le ticket</button>
 
       <div id="gedErr" class="error"></div>
@@ -470,8 +468,7 @@
     <div style="position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden">
       <video id="scanVideo" playsinline autoplay muted
              style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover"></video>
-      <canvas id="scanOverlay"
-              style="position:absolute; inset:0; width:100%; height:100%"></canvas>
+      <canvas id="scanOverlay" style="position:absolute; inset:0; width:100%; height:100%"></canvas>
     </div>
 
     <div style="display:flex; gap:10px; margin-top:10px">
@@ -604,6 +601,7 @@
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
 
+  /* Fallback minAreaRect -> 4 points (math-safe) */
   function rectPointsFromMinAreaRect(cnt){
     const rr = cv.minAreaRect(cnt);
     const cx = rr.center.x, cy = rr.center.y;
@@ -663,32 +661,37 @@
     return out;
   }
 
+  // ✅ OCR OpenAI: éviter binarisation agressive => gris + CLAHE + sharpen léger
   function enhanceDocumentCanvas(canvas){
     const src = cv.imread(canvas);
+
     const gray = new cv.Mat();
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-    const blur = new cv.Mat();
-    cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
+    let claheOut = new cv.Mat();
+    try {
+      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
+      clahe.apply(gray, claheOut);
+      clahe.delete();
+    } catch {
+      claheOut = gray.clone();
+    }
 
-    const thr = new cv.Mat();
-    cv.adaptiveThreshold(
-      blur, thr, 255,
-      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-      cv.THRESH_BINARY,
-      31,
-      10
-    );
+    const blur = new cv.Mat();
+    cv.GaussianBlur(claheOut, blur, new cv.Size(0,0), 1.1);
+
+    const sharp = new cv.Mat();
+    cv.addWeighted(claheOut, 1.6, blur, -0.6, 0, sharp);
 
     const out = new cv.Mat();
-    cv.cvtColor(thr, out, cv.COLOR_GRAY2RGBA, 0);
+    cv.cvtColor(sharp, out, cv.COLOR_GRAY2RGBA, 0);
 
     const outCanvas = document.createElement("canvas");
     outCanvas.width = canvas.width;
     outCanvas.height = canvas.height;
     cv.imshow(outCanvas, out);
 
-    src.delete(); gray.delete(); blur.delete(); thr.delete(); out.delete();
+    src.delete(); gray.delete(); claheOut.delete(); blur.delete(); sharp.delete(); out.delete();
     return outCanvas;
   }
 
@@ -831,7 +834,8 @@
     return cropped;
   }
 
-  function canvasToJpegBytes(canvas, quality = 0.86) {
+  // ✅ JPEG qualité plus haute pour OCR
+  function canvasToJpegBytes(canvas, quality = 0.92) {
     const dataUrl = canvas.toDataURL("image/jpeg", quality);
     const base64 = dataUrl.split(",")[1];
     const bin = atob(base64);
@@ -901,7 +905,7 @@
     const bitmap = await loadImageBitmapWithOrientation(imageFile);
     const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
     const canvas = scanTicketOpenCV(baseCanvas);
-    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.86);
+    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.92);
     return jpegToPdfBlob(bytes, w, h);
   }
 
@@ -923,7 +927,7 @@
   }
 
   // ===========================
-  // ✅ Mode Scan live (manuel + cadre OK)
+  // ✅ Mode Scan live (manuel + cadre + ROI)
   // ===========================
   let scanStream = null;
   let scanRunning = false;
@@ -938,14 +942,15 @@
     stableCount: 0,
     rafId: 0,
 
-    // réglages
     downW: 960,
     stableFrames: 5,
     jitterPx: 24,
     minAreaRatio: 0.02,
+
+    // ✅ Réduit la zone de détection au centre (12% marges)
+    roiMargin: 0.12
   };
 
-  // ✅ Reuse canvas pour les frames
   const _tmpFrame = document.createElement("canvas");
   const _tmpCtx = _tmpFrame.getContext("2d", { willReadFrequently: true });
 
@@ -998,7 +1003,6 @@
     ctx.closePath();
     ctx.stroke();
 
-    // ✅ plus de "Capture..." auto
     scan.msg.textContent = statusText || (scan.stableCount >= scan.stableFrames
       ? "Stable ✓ Prêt à capturer"
       : `Stabilisation… (${scan.stableCount}/${scan.stableFrames})`);
@@ -1032,7 +1036,7 @@
     }));
   }
 
-  // ✅ Détection live robuste (cadre)
+  // ✅ Détection live robuste avec ROI centrale
   function detectQuadLiveFromVideoFrame(){
     const v = scan.video;
     const vw = v.videoWidth, vh = v.videoHeight;
@@ -1047,14 +1051,23 @@
     _tmpFrame.height = dh;
     _tmpCtx.drawImage(v, 0, 0, dw, dh);
 
-    let src = null, gray = null, blur = null, edges = null, dil = null;
+    let src = null, roiMat = null, gray = null, blur = null, edges = null, dil = null;
     let contours = null, hierarchy = null, kernel = null;
 
     try{
       src = cv.imread(_tmpFrame);
 
+      const m = Math.max(0, Math.min(0.35, Number(scan.roiMargin ?? 0.12)));
+      const rx = Math.round(dw * m);
+      const ry = Math.round(dh * m);
+      const rw = Math.max(1, dw - 2*rx);
+      const rh = Math.max(1, dh - 2*ry);
+
+      const roiRect = new cv.Rect(rx, ry, rw, rh);
+      roiMat = src.roi(roiRect);
+
       gray = new cv.Mat();
-      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+      cv.cvtColor(roiMat, gray, cv.COLOR_RGBA2GRAY, 0);
 
       blur = new cv.Mat();
       cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
@@ -1069,15 +1082,13 @@
       contours = new cv.MatVector();
       hierarchy = new cv.Mat();
       cv.findContours(dil, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
       if (!contours.size()) return null;
 
-      const frameArea = dw * dh;
-      const minArea = frameArea * (scan.minAreaRatio ?? 0.02);
+      const roiArea = rw * rh;
+      const minArea = roiArea * (scan.minAreaRatio ?? 0.02);
 
       let bestQuad = null;
       let bestQuadArea = 0;
-
       let bestCnt = null;
       let bestCntArea = 0;
 
@@ -1110,6 +1121,11 @@
 
       const scaleBack = vw / dw;
 
+      const toVideoQuad = (ptsRoi) => {
+        const ptsFull = ptsRoi.map(p => ({ x: p.x + rx, y: p.y + ry }));
+        return orderCorners(ptsFull.map(p => ({ x: p.x * scaleBack, y: p.y * scaleBack })));
+      };
+
       if (bestQuad && bestQuadArea >= minArea){
         const pts = [];
         for (let i=0;i<4;i++){
@@ -1117,16 +1133,14 @@
         }
         bestQuad.delete();
         if (bestCnt) bestCnt.delete();
-
-        return orderCorners(pts.map(p => ({ x: p.x * scaleBack, y: p.y * scaleBack })));
+        return toVideoQuad(pts);
       }
 
-      if (bestCnt && bestCntArea >= Math.max(minArea, frameArea * 0.01)){
+      if (bestCnt && bestCntArea >= Math.max(minArea, roiArea * 0.01)){
         const pts = rectPointsFromMinAreaRect(bestCnt);
         bestCnt.delete();
         if (bestQuad) bestQuad.delete();
-
-        return orderCorners(pts.map(p => ({ x: p.x * scaleBack, y: p.y * scaleBack })));
+        return toVideoQuad(pts);
       }
 
       if (bestQuad) bestQuad.delete();
@@ -1136,6 +1150,7 @@
     }catch{
       return null;
     }finally{
+      try{ if (roiMat) roiMat.delete(); }catch{}
       try{ if (src) src.delete(); }catch{}
       try{ if (gray) gray.delete(); }catch{}
       try{ if (blur) blur.delete(); }catch{}
@@ -1186,7 +1201,7 @@
     const enhanced = enhanceDocumentCanvas(warpedCanvas);
     const cropped = autoCropTicketCanvas(enhanced, 245, 10);
 
-    const { bytes, w, h } = canvasToJpegBytes(cropped, 0.86);
+    const { bytes, w, h } = canvasToJpegBytes(cropped, 0.92);
     scanCapturedPdf = jpegToPdfBlob(bytes, w, h);
     scanCapturedName = "photo_ticket.pdf";
   }
@@ -1284,8 +1299,7 @@
 
     drawOverlay(smooth);
 
-    // ✅ IMPORTANT : AUCUNE CAPTURE AUTO ICI
-
+    // ✅ AUCUNE CAPTURE AUTO ICI
     scan.rafId = requestAnimationFrame(scanLoop);
   }
 
@@ -1328,10 +1342,6 @@
       await captureAndBuildPdfFromVideo(scan.lastQuad);
       el("scanMsg").textContent = "Capture OK ✓ Tu peux fermer puis envoyer.";
       drawOverlay(scan.lastQuad, "Capture OK ✓");
-
-      // optionnel : stop scan après capture
-      // scanRunning = false;
-
     }catch(e){
       el("scanMsg").textContent = "Erreur capture: " + String(e.message || e);
     }
