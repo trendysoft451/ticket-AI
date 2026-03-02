@@ -284,7 +284,7 @@
       .success{ background:rgba(5,150,105,.18); border-color:rgba(5,150,105,.35); color:#a7f3d0; }
     }
 
-    /* ✅ Modal scan : capte les clics uniquement à l'intérieur (évite "bloque tout") */
+    /* ✅ Modal scan */
     #scanModal.hidden{ display:none !important; }
     #scanModal{
       position:fixed; inset:0;
@@ -368,7 +368,7 @@
         <input type="file" id="fileInput" accept="application/pdf,image/*" capture="environment">
       </div>
 
-      <button id="openScan" type="button" style="background:#0ea5e9">📷 Mode scan (auto)</button>
+      <button id="openScan" type="button" style="background:#0ea5e9">📷 Mode scan (manuel)</button>
 
       <button id="uploadGed">Envoyer le ticket</button>
 
@@ -470,7 +470,6 @@
     <div style="position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden">
       <video id="scanVideo" playsinline autoplay muted
              style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover"></video>
-      <!-- canvas overlay toujours visible -->
       <canvas id="scanOverlay"
               style="position:absolute; inset:0; width:100%; height:100%"></canvas>
     </div>
@@ -551,7 +550,6 @@
     return "T" + String(next).padStart(4, "0");
   }
 
-  // Commit UNIQUEMENT quand l'écriture est validée (succès serveur)
   function commitTicketNumberUsed(num) {
     const m = /^T(\d{4,})$/i.exec(String(num || "").trim());
     if (!m) return;
@@ -606,7 +604,6 @@
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
 
-  /* Fallback minAreaRect -> 4 points (math-safe) */
   function rectPointsFromMinAreaRect(cnt){
     const rr = cv.minAreaRect(cnt);
     const cx = rr.center.x, cy = rr.center.y;
@@ -926,7 +923,7 @@
   }
 
   // ===========================
-  // ✅ Mode Scan live (corrigé)
+  // ✅ Mode Scan live (manuel + cadre OK)
   // ===========================
   let scanStream = null;
   let scanRunning = false;
@@ -941,14 +938,14 @@
     stableCount: 0,
     rafId: 0,
 
-    // ✅ paramètres plus tolérants + robustes
+    // réglages
     downW: 960,
     stableFrames: 5,
     jitterPx: 24,
     minAreaRatio: 0.02,
   };
 
-  // ✅ Reuse canvas pour les frames (stabilité + perf)
+  // ✅ Reuse canvas pour les frames
   const _tmpFrame = document.createElement("canvas");
   const _tmpCtx = _tmpFrame.getContext("2d", { willReadFrequently: true });
 
@@ -974,7 +971,6 @@
     const w = scan.overlay.width, h = scan.overlay.height;
     ctx.clearRect(0,0,w,h);
 
-    // assombrit l'écran
     ctx.fillStyle = "rgba(0,0,0,.25)";
     ctx.fillRect(0,0,w,h);
 
@@ -983,7 +979,6 @@
       return;
     }
 
-    // trou transparent dans l'assombrissement
     ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
     ctx.moveTo(quad[0].x, quad[0].y);
@@ -992,7 +987,6 @@
     ctx.fill();
     ctx.globalCompositeOperation = "source-over";
 
-    // contour visible
     ctx.lineWidth = 6;
     ctx.strokeStyle = (scan.stableCount >= scan.stableFrames)
       ? "rgba(34,197,94,.95)"
@@ -1004,8 +998,9 @@
     ctx.closePath();
     ctx.stroke();
 
+    // ✅ plus de "Capture..." auto
     scan.msg.textContent = statusText || (scan.stableCount >= scan.stableFrames
-      ? "Stable ✓ Capture…"
+      ? "Stable ✓ Prêt à capturer"
       : `Stabilisation… (${scan.stableCount}/${scan.stableFrames})`);
   }
 
@@ -1037,7 +1032,7 @@
     }));
   }
 
-  // ✅ Détection live robuste : Canny + dilate + approxPolyDP, fallback minAreaRect
+  // ✅ Détection live robuste (cadre)
   function detectQuadLiveFromVideoFrame(){
     const v = scan.video;
     const vw = v.videoWidth, vh = v.videoHeight;
@@ -1126,7 +1121,6 @@
         return orderCorners(pts.map(p => ({ x: p.x * scaleBack, y: p.y * scaleBack })));
       }
 
-      // fallback : rectangle englobant orienté
       if (bestCnt && bestCntArea >= Math.max(minArea, frameArea * 0.01)){
         const pts = rectPointsFromMinAreaRect(bestCnt);
         bestCnt.delete();
@@ -1215,7 +1209,6 @@
 
     scan.video.srcObject = scanStream;
 
-    // ✅ attendre metadata => sinon videoWidth=0 => aucune détection, aucun encadré
     await new Promise((res) => {
       if (scan.video.readyState >= 1 && scan.video.videoWidth) return res();
       scan.video.onloadedmetadata = () => res();
@@ -1223,7 +1216,6 @@
 
     await scan.video.play();
 
-    // ✅ certains devices mettent un peu de temps à exposer videoWidth/Height
     for (let i = 0; i < 20; i++) {
       if (scan.video.videoWidth && scan.video.videoHeight) break;
       await new Promise(r => setTimeout(r, 50));
@@ -1292,18 +1284,7 @@
 
     drawOverlay(smooth);
 
-    if (scan.stableCount >= scan.stableFrames){
-      scanRunning = false;
-      try{
-        await captureAndBuildPdfFromVideo(smooth);
-        drawOverlay(smooth, "Capture OK ✓");
-        scan.msg.textContent = "Capture OK ✓ Tu peux fermer et envoyer.";
-      }catch(e){
-        scan.msg.textContent = "Erreur capture: " + String(e.message || e);
-        scanRunning = true;
-        scan.stableCount = 0;
-      }
-    }
+    // ✅ IMPORTANT : AUCUNE CAPTURE AUTO ICI
 
     scan.rafId = requestAnimationFrame(scanLoop);
   }
@@ -1332,15 +1313,25 @@
     el("scanMsg").textContent = "Recherche du ticket…";
   });
 
+  // ✅ Capture UNIQUEMENT au clic
   el("scanSnap").addEventListener("click", async () => {
     if (!scan.lastQuad){
       el("scanMsg").textContent = "Aucun ticket détecté.";
       return;
     }
+    if (scan.stableCount < scan.stableFrames){
+      el("scanMsg").textContent = "Ticket détecté mais pas assez stable. Stabilise 1 seconde.";
+      return;
+    }
+
     try{
       await captureAndBuildPdfFromVideo(scan.lastQuad);
-      el("scanMsg").textContent = "Capture OK ✓";
+      el("scanMsg").textContent = "Capture OK ✓ Tu peux fermer puis envoyer.";
       drawOverlay(scan.lastQuad, "Capture OK ✓");
+
+      // optionnel : stop scan après capture
+      // scanRunning = false;
+
     }catch(e){
       el("scanMsg").textContent = "Erreur capture: " + String(e.message || e);
     }
