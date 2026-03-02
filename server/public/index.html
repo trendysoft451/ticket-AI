@@ -293,6 +293,16 @@
       z-index:9999;
       padding:12px;
     }
+
+    /* ✅ Modal crop */
+    #cropModal.hidden{ display:none !important; }
+    #cropModal{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.72);
+      display:flex; align-items:center; justify-content:center;
+      z-index:10000;
+      padding:12px;
+    }
   </style>
 </head>
 
@@ -468,6 +478,7 @@
     <div style="position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden">
       <video id="scanVideo" playsinline autoplay muted
              style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover"></video>
+      <!-- overlay fenêtre centrale -->
       <canvas id="scanOverlay" style="position:absolute; inset:0; width:100%; height:100%"></canvas>
     </div>
 
@@ -476,7 +487,32 @@
       <button id="scanRetry" type="button" style="background:#f59e0b">Reprendre</button>
     </div>
 
-    <div id="scanMsg" class="hint" style="margin-top:8px">Place le ticket dans le cadre…</div>
+    <div id="scanMsg" class="hint" style="margin-top:8px">Place le ticket dans la fenêtre…</div>
+  </div>
+</div>
+
+<!-- ✅ Modal preview + recadrage avant GED/OCR -->
+<div id="cropModal" class="hidden">
+  <div style="width:min(96vw,520px); background:var(--card-bg); border-radius:14px; padding:12px; border:1px solid var(--border)">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px">
+      <strong>Aperçu / Recadrage</strong>
+      <button id="closeCrop" type="button" style="width:auto; padding:8px 10px; background:#64748b">Fermer</button>
+    </div>
+
+    <div class="hint" style="margin:0 0 10px">
+      Glisse pour centrer le ticket. Pince / molette pour zoomer. Le recadrage final est la zone claire.
+    </div>
+
+    <div style="position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden">
+      <canvas id="cropCanvas" style="position:absolute; inset:0; width:100%; height:100%"></canvas>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:10px">
+      <button id="cropReset" type="button" style="background:#f59e0b">Réinitialiser</button>
+      <button id="cropApply" type="button" style="background:#22c55e">Valider recadrage</button>
+    </div>
+
+    <div id="cropMsg" class="hint" style="margin-top:8px"></div>
   </div>
 </div>
 
@@ -579,7 +615,7 @@
     return img;
   }
 
-  function drawBitmapToCanvas(bitmap, maxW = 2200) {
+  function drawBitmapToCanvas(bitmap, maxW = 2600) {
     let w = bitmap.width, h = bitmap.height;
     if (w > maxW) { const r = maxW / w; w = Math.round(w*r); h = Math.round(h*r); }
     const canvas = document.createElement("canvas");
@@ -601,7 +637,6 @@
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
 
-  /* Fallback minAreaRect -> 4 points (math-safe) */
   function rectPointsFromMinAreaRect(cnt){
     const rr = cv.minAreaRect(cnt);
     const cx = rr.center.x, cy = rr.center.y;
@@ -661,7 +696,7 @@
     return out;
   }
 
-  // ✅ OCR OpenAI: éviter binarisation agressive => gris + CLAHE + sharpen léger
+  // ✅ OCR OpenAI-friendly : éviter binarisation agressive -> gris + CLAHE + sharpen léger
   function enhanceDocumentCanvas(canvas){
     const src = cv.imread(canvas);
 
@@ -695,146 +730,6 @@
     return outCanvas;
   }
 
-  function scanTicketOpenCV(srcCanvas) {
-    const src = cv.imread(srcCanvas);
-
-    const gray = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-    let claheOut = new cv.Mat();
-    try {
-      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
-      clahe.apply(gray, claheOut);
-      clahe.delete();
-    } catch {
-      claheOut = gray.clone();
-    }
-
-    const blur = new cv.Mat();
-    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0, 0, cv.BORDER_DEFAULT);
-
-    const thr = new cv.Mat();
-    cv.adaptiveThreshold(
-      blur, thr, 255,
-      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-      cv.THRESH_BINARY,
-      31,
-      8
-    );
-
-    const inv = new cv.Mat();
-    cv.bitwise_not(thr, inv);
-
-    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3,3));
-    const morphed = new cv.Mat();
-    cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel);
-
-    const edges = new cv.Mat();
-    cv.Canny(morphed, edges, 60, 180);
-
-    const contours = new cv.MatVector();
-    const hierarchy = new cv.Mat();
-    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-    let best = null;
-    let bestArea = 0;
-
-    let bestCnt = null;
-    let bestCntArea = 0;
-
-    for (let i = 0; i < contours.size(); i++) {
-      const cnt = contours.get(i);
-      const areaCnt = cv.contourArea(cnt);
-
-      if (areaCnt > bestCntArea) {
-        bestCntArea = areaCnt;
-        if (bestCnt) bestCnt.delete();
-        bestCnt = cnt.clone();
-      }
-
-      const peri = cv.arcLength(cnt, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-
-      if (approx.rows === 4) {
-        const area = cv.contourArea(approx);
-        if (area > bestArea) {
-          bestArea = area;
-          if (best) best.delete();
-          best = approx.clone();
-        }
-      }
-
-      approx.delete();
-      cnt.delete();
-    }
-
-    const minArea = src.rows * src.cols * 0.18;
-
-    let pts = null;
-
-    if (best && bestArea >= minArea) {
-      pts = [];
-      for (let i = 0; i < 4; i++) pts.push({ x: best.intPtr(i,0)[0], y: best.intPtr(i,0)[1] });
-    } else if (bestCnt && bestCntArea >= minArea) {
-      pts = rectPointsFromMinAreaRect(bestCnt);
-    } else {
-      src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-      kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-      if (best) best.delete();
-      if (bestCnt) bestCnt.delete();
-      return srcCanvas;
-    }
-
-    const [tl, tr, br, bl] = orderCorners(pts);
-
-    const widthA = dist(br, bl);
-    const widthB = dist(tr, tl);
-    const maxWidth = Math.max(widthA, widthB);
-
-    const heightA = dist(tr, br);
-    const heightB = dist(tl, bl);
-    const maxHeight = Math.max(heightA, heightB);
-
-    let dstW = Math.max(1, Math.round(maxWidth));
-    let dstH = Math.max(1, Math.round(maxHeight));
-
-    const maxOutW = 2200;
-    if (dstW > maxOutW) {
-      const r = maxOutW / dstW;
-      dstW = Math.round(dstW * r);
-      dstH = Math.round(dstH * r);
-    }
-
-    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
-    ]);
-    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0, dstW-1, 0, dstW-1, dstH-1, 0, dstH-1
-    ]);
-
-    const M = cv.getPerspectiveTransform(srcTri, dstTri);
-    const warped = new cv.Mat();
-    cv.warpPerspective(src, warped, M, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-
-    const outCanvas = document.createElement("canvas");
-    outCanvas.width = dstW;
-    outCanvas.height = dstH;
-    cv.imshow(outCanvas, warped);
-
-    src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-    kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-    srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
-    if (best) best.delete();
-    if (bestCnt) bestCnt.delete();
-
-    const enhanced = enhanceDocumentCanvas(outCanvas);
-    const cropped = autoCropTicketCanvas(enhanced, 245, 10);
-
-    return cropped;
-  }
-
-  // ✅ JPEG qualité plus haute pour OCR
   function canvasToJpegBytes(canvas, quality = 0.92) {
     const dataUrl = canvas.toDataURL("image/jpeg", quality);
     const base64 = dataUrl.split(",")[1];
@@ -900,15 +795,6 @@
     return new Blob(chunks, { type: "application/pdf" });
   }
 
-  async function imageFileToPdfBlob(imageFile) {
-    await waitForOpenCV();
-    const bitmap = await loadImageBitmapWithOrientation(imageFile);
-    const baseCanvas = drawBitmapToCanvas(bitmap, 2600);
-    const canvas = scanTicketOpenCV(baseCanvas);
-    const { bytes, w, h } = canvasToJpegBytes(canvas, 0.92);
-    return jpegToPdfBlob(bytes, w, h);
-  }
-
   function setBtnLoading(btn, isLoading, textLoading) {
     if (!btn) return;
     if (isLoading) {
@@ -927,12 +813,310 @@
   }
 
   // ===========================
-  // ✅ Mode Scan live (manuel + cadre + ROI)
+  // ✅ PREPARED PDF (après recadrage)
+  // ===========================
+  let preparedPdfBlob = null;
+  let preparedPdfName = "ticket.pdf";
+  let preparedSourceKind = "";
+
+  function resetPreparedTicket(){
+    preparedPdfBlob = null;
+    preparedPdfName = "ticket.pdf";
+    preparedSourceKind = "";
+    el("referenceGedId").value = "";
+  }
+
+  // ===========================
+  // ✅ CROP MODAL (preview + recadrage avant GED/OCR)
+  // ===========================
+  const crop = {
+    canvas: null,
+    ctx: null,
+    msg: null,
+    img: null,
+    imgW: 0,
+    imgH: 0,
+    win: { x:0, y:0, w:0, h:0, r: 0.76 }, // fenêtre 3/4
+    scale: 1,
+    minScale: 1,
+    maxScale: 6,
+    offsetX: 0,
+    offsetY: 0,
+    isDown: false,
+    lastX: 0,
+    lastY: 0,
+    pointers: new Map(),
+    pinchStartDist: 0,
+    pinchStartScale: 1
+  };
+
+  function showCropModal(show){
+    const m = el("cropModal");
+    if (show) m.classList.remove("hidden");
+    else m.classList.add("hidden");
+  }
+
+  function cropComputeWindow(){
+    const c = crop.canvas;
+    const W = c.width, H = c.height;
+    const winW = Math.round(W * crop.win.r);
+    const winH = Math.round((winW * 4) / 3);
+    crop.win.w = winW;
+    crop.win.h = Math.min(winH, Math.round(H * 0.86));
+    crop.win.x = Math.round((W - crop.win.w) / 2);
+    crop.win.y = Math.round((H - crop.win.h) / 2);
+  }
+
+  function cropClampToCoverWindow(){
+    const win = crop.win;
+    const scaledW = crop.imgW * crop.scale;
+    const scaledH = crop.imgH * crop.scale;
+
+    const minX = win.x + win.w - scaledW;
+    const maxX = win.x;
+    const minY = win.y + win.h - scaledH;
+    const maxY = win.y;
+
+    crop.offsetX = Math.max(minX, Math.min(maxX, crop.offsetX));
+    crop.offsetY = Math.max(minY, Math.min(maxY, crop.offsetY));
+  }
+
+  function cropRender(){
+    const c = crop.canvas, ctx = crop.ctx;
+    if (!c || !ctx) return;
+
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0,0,c.width,c.height);
+
+    if (crop.img){
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(
+        crop.img,
+        crop.offsetX, crop.offsetY,
+        crop.imgW * crop.scale,
+        crop.imgH * crop.scale
+      );
+      ctx.restore();
+    }
+
+    const win = crop.win;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(0,0,c.width,c.height);
+
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "rgba(0,0,0,1)";
+    ctx.fillRect(win.x, win.y, win.w, win.h);
+
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.strokeRect(win.x+1.5, win.y+1.5, win.w-3, win.h-3);
+
+    ctx.restore();
+  }
+
+  function cropResetView(){
+    if (!crop.img) return;
+    cropComputeWindow();
+
+    const win = crop.win;
+    const sX = win.w / crop.imgW;
+    const sY = win.h / crop.imgH;
+    crop.scale = Math.max(sX, sY);
+    crop.minScale = crop.scale;
+    crop.maxScale = Math.max(6, crop.minScale * 6);
+
+    const scaledW = crop.imgW * crop.scale;
+    const scaledH = crop.imgH * crop.scale;
+    crop.offsetX = win.x + (win.w - scaledW)/2;
+    crop.offsetY = win.y + (win.h - scaledH)/2;
+
+    cropClampToCoverWindow();
+    cropRender();
+  }
+
+  async function openCropFromImageBitmap(imageBitmap, suggestedPdfName){
+    crop.canvas = el("cropCanvas");
+    crop.ctx = crop.canvas.getContext("2d", { willReadFrequently: true });
+    crop.msg = el("cropMsg");
+
+    crop.img = imageBitmap;
+    crop.imgW = imageBitmap.width;
+    crop.imgH = imageBitmap.height;
+
+    const rect = crop.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    crop.canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    crop.canvas.height = Math.max(1, Math.round(rect.height * dpr));
+
+    preparedPdfBlob = null;
+    preparedPdfName = (suggestedPdfName || "ticket.pdf").replace(/\.(png|jpg|jpeg|webp)$/i, ".pdf");
+
+    cropResetView();
+    crop.msg.textContent = "Ajuste le ticket puis valide.";
+    showCropModal(true);
+  }
+
+  function getCanvasPointFromEvent(ev){
+    const rect = crop.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    return {
+      x: (ev.clientX - rect.left) * dpr,
+      y: (ev.clientY - rect.top) * dpr
+    };
+  }
+
+  function pointerDistance(p1, p2){
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    return Math.hypot(dx,dy);
+  }
+
+  function applyZoomAtPoint(newScale, centerX, centerY){
+    newScale = Math.max(crop.minScale, Math.min(crop.maxScale, newScale));
+    const prevScale = crop.scale;
+    const k = newScale / prevScale;
+
+    crop.offsetX = centerX - (centerX - crop.offsetX) * k;
+    crop.offsetY = centerY - (centerY - crop.offsetY) * k;
+    crop.scale = newScale;
+
+    cropClampToCoverWindow();
+    cropRender();
+  }
+
+  function cropBindEvents(){
+    const c = crop.canvas;
+
+    c.addEventListener("pointerdown", (ev) => {
+      c.setPointerCapture(ev.pointerId);
+      const p = getCanvasPointFromEvent(ev);
+      crop.pointers.set(ev.pointerId, p);
+      crop.isDown = true;
+      crop.lastX = p.x;
+      crop.lastY = p.y;
+
+      if (crop.pointers.size === 2){
+        const pts = [...crop.pointers.values()];
+        crop.pinchStartDist = pointerDistance(pts[0], pts[1]);
+        crop.pinchStartScale = crop.scale;
+      }
+    });
+
+    c.addEventListener("pointermove", (ev) => {
+      if (!crop.isDown) return;
+      const p = getCanvasPointFromEvent(ev);
+      crop.pointers.set(ev.pointerId, p);
+
+      if (crop.pointers.size === 2){
+        const pts = [...crop.pointers.values()];
+        const d = pointerDistance(pts[0], pts[1]);
+        if (crop.pinchStartDist > 0){
+          const ratio = d / crop.pinchStartDist;
+          const cx = (pts[0].x + pts[1].x)/2;
+          const cy = (pts[0].y + pts[1].y)/2;
+          applyZoomAtPoint(crop.pinchStartScale * ratio, cx, cy);
+        }
+        return;
+      }
+
+      const dx = p.x - crop.lastX;
+      const dy = p.y - crop.lastY;
+      crop.lastX = p.x;
+      crop.lastY = p.y;
+
+      crop.offsetX += dx;
+      crop.offsetY += dy;
+      cropClampToCoverWindow();
+      cropRender();
+    });
+
+    function endPointer(ev){
+      try{ c.releasePointerCapture(ev.pointerId); }catch{}
+      crop.pointers.delete(ev.pointerId);
+      if (crop.pointers.size < 2) crop.pinchStartDist = 0;
+      if (crop.pointers.size === 0) crop.isDown = false;
+    }
+
+    c.addEventListener("pointerup", endPointer);
+    c.addEventListener("pointercancel", endPointer);
+
+    c.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      const p = getCanvasPointFromEvent(ev);
+      const delta = Math.sign(ev.deltaY);
+      const factor = delta > 0 ? 0.92 : 1.08;
+      applyZoomAtPoint(crop.scale * factor, p.x, p.y);
+    }, { passive:false });
+  }
+
+  async function cropExportToPdf(){
+    if (!crop.img) throw new Error("Aucune image à recadrer.");
+
+    const win = crop.win;
+    const out = document.createElement("canvas");
+    out.width = win.w;
+    out.height = win.h;
+
+    const octx = out.getContext("2d");
+    octx.drawImage(
+      crop.canvas,
+      win.x, win.y, win.w, win.h,
+      0, 0, win.w, win.h
+    );
+
+    await waitForOpenCV();
+    const enhanced = enhanceDocumentCanvas(out);
+    const cropped = autoCropTicketCanvas(enhanced, 245, 10);
+
+    const { bytes, w, h } = canvasToJpegBytes(cropped, 0.92);
+    return jpegToPdfBlob(bytes, w, h);
+  }
+
+  // Crop UI init
+  (function initCropUI(){
+    el("closeCrop").addEventListener("click", () => showCropModal(false));
+    el("cropReset").addEventListener("click", () => {
+      if (!crop.img) return;
+      cropResetView();
+      crop.msg.textContent = "Réinitialisé.";
+    });
+    el("cropApply").addEventListener("click", async () => {
+      try{
+        el("cropMsg").textContent = "Génération PDF…";
+        const pdf = await cropExportToPdf();
+        preparedPdfBlob = pdf;
+        preparedPdfName = preparedPdfName || "ticket.pdf";
+        el("cropMsg").textContent = "OK ✓ Recadrage prêt.";
+        showCropModal(false);
+        el("gedOk").textContent = "✅ Ticket prêt (recadré). Clique « Envoyer le ticket ».";
+      }catch(e){
+        el("cropMsg").textContent = "Erreur recadrage: " + String(e.message || e);
+      }
+    });
+
+    // events bind only when canvas exists (DOM loaded already)
+    cropBindEvents();
+
+    window.addEventListener("resize", () => {
+      if (!crop.img || !crop.canvas) return;
+      const rect = crop.canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      crop.canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      crop.canvas.height = Math.max(1, Math.round(rect.height * dpr));
+      cropResetView();
+    });
+  })();
+
+  // ===========================
+  // ✅ SCAN LIVE (fenêtre overlay + capture MANUELLE)
   // ===========================
   let scanStream = null;
   let scanRunning = false;
-  let scanCapturedPdf = null;
-  let scanCapturedName = "photo_ticket.pdf";
 
   const scan = {
     video: null,
@@ -943,12 +1127,12 @@
     rafId: 0,
 
     downW: 960,
-    stableFrames: 5,
+    stableFrames: 4,
     jitterPx: 24,
     minAreaRatio: 0.02,
 
-    // ✅ Réduit la zone de détection au centre (12% marges)
-    roiMargin: 0.12
+    // ✅ ROI : fenêtre centrale (overlay)
+    roiMargin: 0.14
   };
 
   const _tmpFrame = document.createElement("canvas");
@@ -971,41 +1155,30 @@
     c.height = vh;
   }
 
-  function drawOverlay(quad, statusText){
+  function drawOverlayFixedRoi(statusText){
     const ctx = scan.overlay.getContext("2d");
     const w = scan.overlay.width, h = scan.overlay.height;
     ctx.clearRect(0,0,w,h);
 
-    ctx.fillStyle = "rgba(0,0,0,.25)";
+    const m = Math.max(0, Math.min(0.35, Number(scan.roiMargin ?? 0.14)));
+    const rx = Math.round(w * m);
+    const ry = Math.round(h * m);
+    const rw = Math.max(1, w - 2*rx);
+    const rh = Math.max(1, h - 2*ry);
+
+    ctx.fillStyle = "rgba(0,0,0,.45)";
     ctx.fillRect(0,0,w,h);
 
-    if (!quad){
-      scan.msg.textContent = statusText || "Aucun contour net…";
-      return;
-    }
-
     ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.moveTo(quad[0].x, quad[0].y);
-    for (let i=1;i<4;i++) ctx.lineTo(quad[i].x, quad[i].y);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,1)";
+    ctx.fillRect(rx, ry, rw, rh);
+
     ctx.globalCompositeOperation = "source-over";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(255,255,255,.9)";
+    ctx.strokeRect(rx+2, ry+2, rw-4, rh-4);
 
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = (scan.stableCount >= scan.stableFrames)
-      ? "rgba(34,197,94,.95)"
-      : "rgba(14,165,233,.95)";
-
-    ctx.beginPath();
-    ctx.moveTo(quad[0].x, quad[0].y);
-    for (let i=1;i<4;i++) ctx.lineTo(quad[i].x, quad[i].y);
-    ctx.closePath();
-    ctx.stroke();
-
-    scan.msg.textContent = statusText || (scan.stableCount >= scan.stableFrames
-      ? "Stable ✓ Prêt à capturer"
-      : `Stabilisation… (${scan.stableCount}/${scan.stableFrames})`);
+    scan.msg.textContent = statusText || "Place le ticket dans la fenêtre, puis clique Capturer.";
   }
 
   function quadArea(quad){
@@ -1036,7 +1209,7 @@
     }));
   }
 
-  // ✅ Détection live robuste avec ROI centrale
+  // Détection quad (utilisée pour stabiliser / perspective ; affichage = overlay fixe)
   function detectQuadLiveFromVideoFrame(){
     const v = scan.video;
     const vw = v.videoWidth, vh = v.videoHeight;
@@ -1057,7 +1230,7 @@
     try{
       src = cv.imread(_tmpFrame);
 
-      const m = Math.max(0, Math.min(0.35, Number(scan.roiMargin ?? 0.12)));
+      const m = Math.max(0, Math.min(0.35, Number(scan.roiMargin ?? 0.14)));
       const rx = Math.round(dw * m);
       const ry = Math.round(dh * m);
       const rw = Math.max(1, dw - 2*rx);
@@ -1120,7 +1293,6 @@
       }
 
       const scaleBack = vw / dw;
-
       const toVideoQuad = (ptsRoi) => {
         const ptsFull = ptsRoi.map(p => ({ x: p.x + rx, y: p.y + ry }));
         return orderCorners(ptsFull.map(p => ({ x: p.x * scaleBack, y: p.y * scaleBack })));
@@ -1162,52 +1334,8 @@
     }
   }
 
-  async function captureAndBuildPdfFromVideo(quadVideoCoords){
-    const v = scan.video;
-    const vw = v.videoWidth, vh = v.videoHeight;
-
-    const baseCanvas = document.createElement("canvas");
-    baseCanvas.width = vw; baseCanvas.height = vh;
-    baseCanvas.getContext("2d").drawImage(v, 0,0, vw,vh);
-
-    const tl = quadVideoCoords[0], tr = quadVideoCoords[1], br = quadVideoCoords[2], bl = quadVideoCoords[3];
-    const widthA = Math.hypot(br.x-bl.x, br.y-bl.y);
-    const widthB = Math.hypot(tr.x-tl.x, tr.y-tl.y);
-    const heightA = Math.hypot(tr.x-br.x, tr.y-br.y);
-    const heightB = Math.hypot(tl.x-bl.x, tl.y-bl.y);
-
-    let outW = Math.max(1, Math.round(Math.max(widthA, widthB)));
-    let outH = Math.max(1, Math.round(Math.max(heightA, heightB)));
-    if (outW > 2200){ const rr = 2200/outW; outW = Math.round(outW*rr); outH = Math.round(outH*rr); }
-
-    const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
-    ]);
-    const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0, 0, outW-1, 0, outW-1, outH-1, 0, outH-1
-    ]);
-
-    const src = cv.imread(baseCanvas);
-    const M = cv.getPerspectiveTransform(srcTri, dstTri);
-    const warped = new cv.Mat();
-    cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
-
-    const warpedCanvas = document.createElement("canvas");
-    warpedCanvas.width = outW; warpedCanvas.height = outH;
-    cv.imshow(warpedCanvas, warped);
-
-    src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
-
-    const enhanced = enhanceDocumentCanvas(warpedCanvas);
-    const cropped = autoCropTicketCanvas(enhanced, 245, 10);
-
-    const { bytes, w, h } = canvasToJpegBytes(cropped, 0.92);
-    scanCapturedPdf = jpegToPdfBlob(bytes, w, h);
-    scanCapturedName = "photo_ticket.pdf";
-  }
-
   async function openScanMode(){
-    scanCapturedPdf = null;
+    resetPreparedTicket();
 
     scan.video = el("scanVideo");
     scan.overlay = el("scanOverlay");
@@ -1239,7 +1367,7 @@
     resizeOverlayToVideo();
 
     scanRunning = true;
-    scan.msg.textContent = "Recherche du ticket…";
+    drawOverlayFixedRoi("Place le ticket dans la fenêtre, puis clique Capturer.");
     scan.rafId = requestAnimationFrame(scanLoop);
   }
 
@@ -1259,7 +1387,7 @@
     if (!scanRunning) return;
 
     if (!window.cv || !cv.Mat){
-      drawOverlay(null, "OpenCV.js non prêt…");
+      drawOverlayFixedRoi("OpenCV.js non prêt…");
       scan.rafId = requestAnimationFrame(scanLoop);
       return;
     }
@@ -1267,7 +1395,7 @@
     if (!scan.overlay.width || !scan.overlay.height) {
       resizeOverlayToVideo();
       if (!scan.overlay.width || !scan.overlay.height) {
-        drawOverlay(null, "Vidéo non initialisée (dimensions = 0)");
+        drawOverlayFixedRoi("Vidéo non initialisée (dimensions = 0)");
         scan.rafId = requestAnimationFrame(scanLoop);
         return;
       }
@@ -1280,7 +1408,7 @@
     if (!quad){
       scan.lastQuad = null;
       scan.stableCount = 0;
-      drawOverlay(null, "Ajuste le ticket dans le champ…");
+      drawOverlayFixedRoi("Ajuste le ticket dans la fenêtre…");
       scan.rafId = requestAnimationFrame(scanLoop);
       return;
     }
@@ -1297,15 +1425,78 @@
     scan.stableCount = stable ? (scan.stableCount + 1) : 0;
     scan.lastQuad = smooth;
 
-    drawOverlay(smooth);
+    drawOverlayFixedRoi(stable ? "Ticket détecté ✓ Clique Capturer" : "Stabilise le ticket dans la fenêtre…");
 
-    // ✅ AUCUNE CAPTURE AUTO ICI
+    // ✅ PAS de capture auto
     scan.rafId = requestAnimationFrame(scanLoop);
   }
 
-  // UI scan handlers
+  async function captureFromVideoToCropPreview(){
+    const v = scan.video;
+    const vw = v.videoWidth, vh = v.videoHeight;
+
+    // image de base
+    const baseCanvas = document.createElement("canvas");
+    baseCanvas.width = vw; baseCanvas.height = vh;
+    baseCanvas.getContext("2d").drawImage(v, 0,0, vw,vh);
+
+    await waitForOpenCV();
+
+    // Si quad stable, perspective. Sinon fallback full frame (recadrage manuel fera le boulot).
+    let previewCanvas = baseCanvas;
+
+    if (scan.lastQuad && scan.stableCount >= scan.stableFrames){
+      try{
+        const tl = scan.lastQuad[0], tr = scan.lastQuad[1], br = scan.lastQuad[2], bl = scan.lastQuad[3];
+
+        const widthA = Math.hypot(br.x-bl.x, br.y-bl.y);
+        const widthB = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+        const heightA = Math.hypot(tr.x-br.x, tr.y-br.y);
+        const heightB = Math.hypot(tl.x-bl.x, tl.y-bl.y);
+
+        let outW = Math.max(1, Math.round(Math.max(widthA, widthB)));
+        let outH = Math.max(1, Math.round(Math.max(heightA, heightB)));
+        if (outW > 2200){ const rr = 2200/outW; outW = Math.round(outW*rr); outH = Math.round(outH*rr); }
+
+        const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
+        ]);
+        const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          0, 0, outW-1, 0, outW-1, outH-1, 0, outH-1
+        ]);
+
+        const src = cv.imread(baseCanvas);
+        const M = cv.getPerspectiveTransform(srcTri, dstTri);
+        const warped = new cv.Mat();
+        cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
+
+        const warpedCanvas = document.createElement("canvas");
+        warpedCanvas.width = outW; warpedCanvas.height = outH;
+        cv.imshow(warpedCanvas, warped);
+
+        src.delete(); srcTri.delete(); dstTri.delete(); M.delete(); warped.delete();
+
+        // preview OCR-friendly (sans binarisation)
+        const enhanced = enhanceDocumentCanvas(warpedCanvas);
+        previewCanvas = autoCropTicketCanvas(enhanced, 245, 10);
+      }catch{
+        // fallback baseCanvas
+        previewCanvas = baseCanvas;
+      }
+    }
+
+    const bmp = await createImageBitmap(previewCanvas);
+    preparedSourceKind = "scan";
+    await openCropFromImageBitmap(bmp, "photo_ticket.pdf");
+  }
+
+  // ===========================
+  // UI INIT
+  // ===========================
+  // Scan UI handlers
   el("openScan").addEventListener("click", async () => {
     el("gedErr").textContent = "";
+    el("gedOk").textContent = "";
     try{
       await waitForOpenCV();
       await openScanMode();
@@ -1319,29 +1510,17 @@
 
   el("scanRetry").addEventListener("click", () => {
     if (!scanStream) return;
-    scanCapturedPdf = null;
     scan.lastQuad = null;
     scan.stableCount = 0;
     scanRunning = true;
+    drawOverlayFixedRoi("Place le ticket dans la fenêtre…");
     scan.rafId = requestAnimationFrame(scanLoop);
-    el("scanMsg").textContent = "Recherche du ticket…";
   });
 
-  // ✅ Capture UNIQUEMENT au clic
   el("scanSnap").addEventListener("click", async () => {
-    if (!scan.lastQuad){
-      el("scanMsg").textContent = "Aucun ticket détecté.";
-      return;
-    }
-    if (scan.stableCount < scan.stableFrames){
-      el("scanMsg").textContent = "Ticket détecté mais pas assez stable. Stabilise 1 seconde.";
-      return;
-    }
-
     try{
-      await captureAndBuildPdfFromVideo(scan.lastQuad);
-      el("scanMsg").textContent = "Capture OK ✓ Tu peux fermer puis envoyer.";
-      drawOverlay(scan.lastQuad, "Capture OK ✓");
+      await captureFromVideoToCropPreview();
+      el("scanMsg").textContent = "Aperçu ouvert. Recadre puis valide.";
     }catch(e){
       el("scanMsg").textContent = "Erreur capture: " + String(e.message || e);
     }
@@ -1349,6 +1528,49 @@
 
   window.addEventListener("beforeunload", () => {
     try { stopScanMode(); } catch {}
+  });
+
+  // File input: image => ouvre crop ; pdf => prêt direct
+  el("fileInput").addEventListener("change", async () => {
+    el("gedErr").textContent = "";
+    el("gedOk").textContent = "";
+    resetPreparedTicket();
+
+    const file = el("fileInput").files[0];
+    if (!file) return;
+
+    const isImg = (file.type || "").startsWith("image/");
+    const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
+
+    if (isPdf){
+      preparedPdfBlob = file;
+      preparedPdfName = file.name || "ticket.pdf";
+      preparedSourceKind = "pdf";
+      el("gedOk").textContent = "PDF prêt. Clique « Envoyer le ticket ».";
+      return;
+    }
+
+    if (isImg){
+      try{
+        await waitForOpenCV();
+        const bitmap = await loadImageBitmapWithOrientation(file);
+
+        // petite réduction + amélioration soft pour preview
+        const base = drawBitmapToCanvas(bitmap, 2600);
+        const enhanced = enhanceDocumentCanvas(base);
+        const pre = autoCropTicketCanvas(enhanced, 245, 10);
+
+        const bmp = await createImageBitmap(pre);
+        preparedSourceKind = "file";
+        await openCropFromImageBitmap(bmp, "photo_ticket.pdf");
+        el("gedOk").textContent = "Aperçu ouvert : recadre puis valide, ensuite clique « Envoyer le ticket ».";
+      }catch(e){
+        el("gedErr").textContent = "Impossible d’ouvrir l’aperçu : " + String(e.message || e);
+      }
+      return;
+    }
+
+    el("gedErr").textContent = "Format non supporté. Utilise PDF ou image.";
   });
 
   // ===========================
@@ -1443,6 +1665,7 @@
       if (!cd) el("gedErr").textContent = "Code dossier non configuré. Cliquez sur l’icône réglages.";
     })();
 
+    // ✅ Upload GED/OCR : ne casse pas endpoints (mêmes routes), mais envoie le PDF préparé
     el("uploadGed").addEventListener("click", async () => {
       el("gedErr").textContent = "";
       el("gedOk").textContent = "";
@@ -1456,34 +1679,15 @@
         return;
       }
 
-      const file = el("fileInput").files[0];
-      const hasScanPdf = !!scanCapturedPdf;
-
-      if (!file && !hasScanPdf) { el("gedErr").textContent = "Choisis un PDF / photo ou utilise Mode scan."; return; }
-
-      let pdfBlob = null;
-      let filename = "ticket.pdf";
+      const pdfBlob = preparedPdfBlob;
+      const filename = preparedPdfName || "ticket.pdf";
+      if (!pdfBlob) {
+        el("gedErr").textContent = "Aucun ticket prêt. Scanne ou choisis une photo, puis recadre/valide.";
+        return;
+      }
 
       setBtnLoading(el("uploadGed"), true, "Analyse / OCR...");
       try {
-        if (hasScanPdf) {
-          pdfBlob = scanCapturedPdf;
-          filename = scanCapturedName || "photo_ticket.pdf";
-        } else {
-          const isPdf = file.type === "application/pdf" || (file.name || "").toLowerCase().endsWith(".pdf");
-          const isImg = (file.type || "").startsWith("image/");
-
-          if (isPdf) {
-            pdfBlob = file;
-            filename = file.name || "ticket.pdf";
-          } else if (isImg) {
-            pdfBlob = await imageFileToPdfBlob(file);
-            filename = "photo_ticket.pdf";
-          } else {
-            throw new Error("Format non supporté. Utilise PDF ou image.");
-          }
-        }
-
         const form = new FormData();
         form.append("pdf", pdfBlob, filename);
 
