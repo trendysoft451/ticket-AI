@@ -941,12 +941,16 @@
     stableCount: 0,
     rafId: 0,
 
-    // ✅ paramètres plus tolérants (encadré qui apparaît + facilement)
+    // ✅ paramètres plus tolérants + robustes
     downW: 960,
-    stableFrames: 6,
-    jitterPx: 18,
-    minAreaRatio: 0.06,
+    stableFrames: 5,
+    jitterPx: 24,
+    minAreaRatio: 0.02,
   };
+
+  // ✅ Reuse canvas pour les frames (stabilité + perf)
+  const _tmpFrame = document.createElement("canvas");
+  const _tmpCtx = _tmpFrame.getContext("2d", { willReadFrequently: true });
 
   function showScanModal(show){
     const m = el("scanModal");
@@ -1033,88 +1037,120 @@
     }));
   }
 
+  // ✅ Détection live robuste : Canny + dilate + approxPolyDP, fallback minAreaRect
   function detectQuadLiveFromVideoFrame(){
     const v = scan.video;
     const vw = v.videoWidth, vh = v.videoHeight;
     if (!vw || !vh) return null;
 
-    const targetW = scan.downW;
+    const targetW = scan.downW || 960;
     const r = targetW / vw;
-    const dw = targetW;
+    const dw = Math.max(1, targetW);
     const dh = Math.max(1, Math.round(vh * r));
 
-    const tmp = document.createElement("canvas");
-    tmp.width = dw; tmp.height = dh;
-    tmp.getContext("2d").drawImage(v, 0,0, dw,dh);
+    _tmpFrame.width = dw;
+    _tmpFrame.height = dh;
+    _tmpCtx.drawImage(v, 0, 0, dw, dh);
 
-    const src = cv.imread(tmp);
-    const gray = new cv.Mat();
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+    let src = null, gray = null, blur = null, edges = null, dil = null;
+    let contours = null, hierarchy = null, kernel = null;
 
-    // ✅ CLAHE : aide énorme pour détection (ombres / contrastes)
-    let claheOut = new cv.Mat();
-    try {
-      const clahe = new cv.CLAHE(2.0, new cv.Size(8,8));
-      clahe.apply(gray, claheOut);
-      clahe.delete();
-    } catch {
-      claheOut = gray.clone();
-    }
+    try{
+      src = cv.imread(_tmpFrame);
 
-    const blur = new cv.Mat();
-    cv.GaussianBlur(claheOut, blur, new cv.Size(5,5), 0);
+      gray = new cv.Mat();
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-    const thr = new cv.Mat();
-    cv.adaptiveThreshold(blur, thr, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 31, 10);
+      blur = new cv.Mat();
+      cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0);
 
-    const inv = new cv.Mat();
-    cv.bitwise_not(thr, inv);
+      edges = new cv.Mat();
+      cv.Canny(blur, edges, 40, 140);
 
-    const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5,5));
-    const morphed = new cv.Mat();
-    cv.morphologyEx(inv, morphed, cv.MORPH_CLOSE, kernel, new cv.Point(-1,-1), 2);
+      kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5,5));
+      dil = new cv.Mat();
+      cv.dilate(edges, dil, kernel, new cv.Point(-1,-1), 1);
 
-    const edges = new cv.Mat();
-    cv.Canny(morphed, edges, 60, 180);
+      contours = new cv.MatVector();
+      hierarchy = new cv.Mat();
+      cv.findContours(dil, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    const contours = new cv.MatVector();
-    const hierarchy = new cv.Mat();
-    cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      if (!contours.size()) return null;
 
-    let bestCnt = null;
-    let bestArea = 0;
-    for (let i=0;i<contours.size();i++){
-      const cnt = contours.get(i);
-      const area = cv.contourArea(cnt);
-      if (area > bestArea){
-        bestArea = area;
+      const frameArea = dw * dh;
+      const minArea = frameArea * (scan.minAreaRatio ?? 0.02);
+
+      let bestQuad = null;
+      let bestQuadArea = 0;
+
+      let bestCnt = null;
+      let bestCntArea = 0;
+
+      for (let i=0; i<contours.size(); i++){
+        const cnt = contours.get(i);
+        const area = cv.contourArea(cnt);
+
+        if (area > bestCntArea){
+          bestCntArea = area;
+          if (bestCnt) bestCnt.delete();
+          bestCnt = cnt.clone();
+        }
+
+        const peri = cv.arcLength(cnt, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+
+        if (approx.rows === 4){
+          const a = cv.contourArea(approx);
+          if (a > bestQuadArea){
+            bestQuadArea = a;
+            if (bestQuad) bestQuad.delete();
+            bestQuad = approx.clone();
+          }
+        }
+
+        approx.delete();
+        cnt.delete();
+      }
+
+      const scaleBack = vw / dw;
+
+      if (bestQuad && bestQuadArea >= minArea){
+        const pts = [];
+        for (let i=0;i<4;i++){
+          pts.push({ x: bestQuad.intPtr(i,0)[0], y: bestQuad.intPtr(i,0)[1] });
+        }
+        bestQuad.delete();
         if (bestCnt) bestCnt.delete();
-        bestCnt = cnt.clone();
+
+        return orderCorners(pts.map(p => ({ x: p.x * scaleBack, y: p.y * scaleBack })));
       }
-      cnt.delete();
-    }
 
-    src.delete(); gray.delete(); claheOut.delete(); blur.delete(); thr.delete(); inv.delete();
-    kernel.delete(); morphed.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-
-    if (!bestCnt) return null;
-
-    const minArea = (dw * dh) * scan.minAreaRatio;
-
-    // ✅ tolérance : si petit ticket dans le cadre, on garde au-dessus de 2%
-    if (bestArea < minArea) {
-      if (bestArea < (dw * dh) * 0.02) {
+      // fallback : rectangle englobant orienté
+      if (bestCnt && bestCntArea >= Math.max(minArea, frameArea * 0.01)){
+        const pts = rectPointsFromMinAreaRect(bestCnt);
         bestCnt.delete();
-        return null;
+        if (bestQuad) bestQuad.delete();
+
+        return orderCorners(pts.map(p => ({ x: p.x * scaleBack, y: p.y * scaleBack })));
       }
+
+      if (bestQuad) bestQuad.delete();
+      if (bestCnt) bestCnt.delete();
+      return null;
+
+    }catch{
+      return null;
+    }finally{
+      try{ if (src) src.delete(); }catch{}
+      try{ if (gray) gray.delete(); }catch{}
+      try{ if (blur) blur.delete(); }catch{}
+      try{ if (edges) edges.delete(); }catch{}
+      try{ if (dil) dil.delete(); }catch{}
+      try{ if (kernel) kernel.delete(); }catch{}
+      try{ if (contours) contours.delete(); }catch{}
+      try{ if (hierarchy) hierarchy.delete(); }catch{}
     }
-
-    const pts = rectPointsFromMinAreaRect(bestCnt);
-    bestCnt.delete();
-
-    const scaleBack = vw / dw;
-    const quad = orderCorners(pts.map(p => ({ x: p.x*scaleBack, y: p.y*scaleBack })));
-    return quad;
   }
 
   async function captureAndBuildPdfFromVideo(quadVideoCoords){
